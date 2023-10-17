@@ -12,7 +12,7 @@ import subprocess
 
 from numpy.random import RandomState
 
-from .miscelleanous import bcolors, chdir, create_directory
+from .miscelleanous import bcolors, chdir, checkifinpath, create_directory
 from .qmcalc import xtbopt
 
 
@@ -24,14 +24,10 @@ def main(arguments: ap.Namespace) -> None:
     numcomp = arguments.numcomp
     opt = arguments.opt
 
-    ### GENERAL PARAMETERS ###
-    maxcid = 100000
-    maxnumat = 35
-
     # set the seed
-    print(f"Generating random numbers between 1 and {maxcid:d} ...")
-    seed = RandomState(2009)
-    values = seed.randint(1, maxcid, size=10 * numcomp)
+    print(f"Generating random numbers between 1 and {arguments.maxcid:d} ...")
+    seed = RandomState(arguments.seed)
+    values = seed.randint(1, arguments.maxcid, size=10 * numcomp)
     print("Done.")
 
     pwd = os.getcwd()
@@ -98,10 +94,10 @@ skipping CID {i}.{bcolors.ENDC}"
                 lines = f.readlines()
                 nat = int(lines[3].split()[0])
                 print(" " * 3 + f"# of atoms: {nat:8d}")
-                if int(nat) > maxnumat:
+                if int(nat) > arguments.maxnumat:
                     print(
                         f"{bcolors.WARNING}Number of \
-atoms in {i}.sdf is larger than {maxnumat} - \
+atoms in {i}.sdf is larger than {arguments.maxnumat} - \
 skipping CID {i}.{bcolors.ENDC}"
                     )
                     # rm the sdf file
@@ -172,14 +168,16 @@ skipping CID {i}.{bcolors.ENDC}"
     else:
         print(
             f"{bcolors.BOLD}Some directories already existed. \
-The list of successful downloads was not written to a file.{bcolors.ENDC}"
+The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
         )
+        with open("compounds.txt", "w", encoding="UTF-8") as f:
+            for i in comp:
+                f.write(str(i) + "\n")
 
 
 def console_entry_point() -> int:
     # parse arguments
     parser = ap.ArgumentParser(description="Generate random molecules from PubChem")
-
     parser.add_argument(
         "-n",
         "--numcomp",
@@ -200,8 +198,48 @@ def console_entry_point() -> int:
         required=False,
         default=False,
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=2009,
+        help="Seed for the random number generator",
+        required=False,
+    )
+    parser.add_argument(
+        "--maxcid",
+        type=int,
+        default=100000,
+        help="Maximum CID to generate random numbers",
+        required=False,
+    )
+    parser.add_argument(
+        "--maxnumat",
+        type=int,
+        default=35,
+        help="Maximum number of atoms in a molecule",
+        required=False,
+    )
+    parser.add_argument(
+        "--crest",
+        action="store_true",
+        help="Conformer sampling with CREST",
+        required=False,
+        default=False,
+    )
 
     args = parser.parse_args()
+
+    # check for inconsistencies between arguments
+    if (not args.opt) and args.crest:
+        print(f"{bcolors.WARNING}You cannot use both --opt and --crest.{bcolors.ENDC}")
+
+    # check if dependencies are installed
+    checkifinpath("PubGrep")
+    if args.opt:
+        checkifinpath("xtb")
+        checkifinpath("mctc-convert")
+    if args.crest:
+        checkifinpath("crest")
     main(args)
     return 0
 

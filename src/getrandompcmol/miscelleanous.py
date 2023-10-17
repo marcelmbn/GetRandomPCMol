@@ -5,6 +5,7 @@ Miscelleanous functions that are used in the project.
 from __future__ import annotations
 
 import os
+import subprocess as sp
 
 
 class bcolors:
@@ -59,4 +60,12 @@ def chdir(dirname: str) -> None:
     except PermissionError:
         print(f"You do not have permissions to change to {dirname}")
 
+    return None
+
+
+def checkifinpath(executable: str) -> None:
+    try:
+        sp.run(["which", executable], stdout=sp.DEVNULL, stderr=sp.DEVNULL, check=True)
+    except sp.CalledProcessError as exc:
+        raise FileNotFoundError(f"'{executable}' is not in PATH") from exc
     return None
