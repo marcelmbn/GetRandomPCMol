@@ -1,0 +1,46 @@
+"""
+Miscelleanous functions that are used in the project.
+"""
+
+from __future__ import annotations
+
+import os
+
+
+def create_directory(name: str) -> bool:
+    """
+    Creates a directory with the given name if it does not exist already.
+    """
+    if not os.path.exists(name):
+        os.mkdir(name)
+        exist = False
+    else:
+        print(f"Directory {name} already exists.")
+        exist = True
+
+    # check if the new directory exists and raise an error and stop execution if not
+    try:
+        if not os.path.exists(name):
+            raise FileNotFoundError(f"Directory {name} does not exist.")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        raise SystemExit(1) from e
+    return exist
+
+
+# define a function which goes back to the original working directory if it is called
+def chdir(dirname: str) -> None:
+    """
+    Change the active directory.
+    """
+    try:
+        os.chdir(str(dirname))
+        # print("Current working directory: {0}".format(os.getcwd()))
+    except FileNotFoundError:
+        print(f"Directory: {dirname} does not exist")
+    except NotADirectoryError:
+        print(f"{dirname} is not a directory")
+    except PermissionError:
+        print(f"You do not have permissions to change to {dirname}")
+
+    return None

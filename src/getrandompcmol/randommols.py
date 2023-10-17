@@ -1,30 +1,29 @@
 #!/usr/bin/env python
 
+"""
+This script generates random molecules from PubChem and optimizes them with xTB.
+"""
+from __future__ import annotations
+
 import argparse as ap
 import os
 import subprocess
 
 from numpy.random import RandomState
 
+from .miscelleanous import chdir, create_directory
 
-def main(arguments):
+
+def main(arguments: ap.Namespace) -> None:
+    """
+    Main function of the script.
+    """
     # get number of compounds from command line
     numcomp = arguments.numcomp
 
     ### GENERAL PARAMETERS ###
     maxcid = 10000000
     maxnumat = 50
-
-    class bcolors:
-        HEADER = "\033[95m"
-        OKBLUE = "\033[94m"
-        OKCYAN = "\033[96m"
-        OKGREEN = "\033[92m"
-        WARNING = "\033[93m"
-        FAIL = "\033[91m"
-        ENDC = "\033[0m"
-        BOLD = "\033[1m"
-        UNDERLINE = "\033[4m"
 
     # set the seed
     print(f"Generating random numbers between 1 and {maxcid:d} ...")
@@ -35,8 +34,8 @@ def main(arguments):
     pwd = os.getcwd()
 
     # run PubGrep for each value and set up a list with successful downloads
-    comp = []
-    molname = []
+    comp: list[int] = []
+    molname: list[str] = []
     for i in values:
         print(f"\nDownloading CID {i:7d} ...")
         try:
@@ -82,16 +81,6 @@ def main(arguments):
             else:
                 print(" " * 3 + f"Downloaded {i:7d} successfully after xTB conversion.")
 
-        try:
-            os.chdir(str(pwd) + "/pubchem_compounds/" + str(i))
-            # print("Current working directory: {0}".format(os.getcwd()))
-        except FileNotFoundError:
-            print(f"Directory: /pubchem_compounds/{i} does not exist")
-        except NotADirectoryError:
-            print(f"/pubchem_compounds/{i} is not a directory")
-        except PermissionError:
-            print(f"You do not have permissions to change to /pubchem_compounds/{i}")
-
         # print the first entry of the fourth line compund of interest in sdf format
         with open(f"{i}.sdf", encoding="UTF-8") as f:
             lines = f.readlines()
@@ -99,13 +88,14 @@ def main(arguments):
             print(" " * 3 + f"# of atoms: {nat:8d}")
             if int(nat) > maxnumat:
                 print(
-                    f"""{bcolors.WARNING}Number of
-                    atoms in {i}.sdf is larger than {maxnumat} -
-                    skipping CID {i:7d}{bcolors.ENDC}"""
+                    f"{bcolors.WARNING}Number of \
+atoms in {i}.sdf is larger than {maxnumat} -\
+skipping CID {i:7d}{bcolors.ENDC}"
                 )
-                odir(pwd)
                 continue
 
+        direxists = create_directory(str(i))
+        chdir(str(i))
         try:
             pgout = subprocess.run(
                 ["xtb", f"{i}.sdf", "--opt"],
@@ -117,7 +107,7 @@ def main(arguments):
                 f.write(pgout.stdout.decode("utf-8"))
         except subprocess.TimeoutExpired as exc:
             print(" " * 3 + f"Process timed out.\n{exc}")
-            odir(pwd)
+            chdir(pwd)
             continue
         except subprocess.CalledProcessError as exc:
             print(
@@ -131,7 +121,7 @@ def main(arguments):
                 f"{bcolors.WARNING}xTB optimization failed - skipping CID %7d{bcolors.ENDC}"
                 % i
             )
-            odir(pwd)
+            chdir(pwd)
             continue
 
         # load fourth entry of a line with ":: total charge" of xtb.out into a variable
@@ -155,7 +145,7 @@ def main(arguments):
             )
         except subprocess.TimeoutExpired as exc:
             print(" " * 3 + f"Process timed out.\n{exc}")
-            odir(pwd)
+            chdir(pwd)
             continue
         except subprocess.CalledProcessError as exc:
             print(" " * 3 + "Status : FAIL", exc.returncode, exc.output)
@@ -166,10 +156,10 @@ def main(arguments):
                 f"{bcolors.WARNING}mctc-convert failed - skipping CID %7d{bcolors.ENDC}"
                 % i
             )
-            odir(pwd)
+            chdir(pwd)
             continue
 
-        odir(pwd)
+        chdir(pwd)
 
         # grep the name of the molecule from found.results (first entry in first line)
         with open("found.results", encoding="UTF-8") as f:
@@ -178,8 +168,8 @@ def main(arguments):
             print(" " * 3 + f"Compound name: {molname[-1]:s}")
 
         print(
-            f"""{bcolors.OKGREEN}Structure of
-%7d successfully generated and optimized.{bcolors.ENDC}"""
+            f"{bcolors.OKGREEN}Structure of\
+ %7d successfully generated and optimized.{bcolors.ENDC}"
             % i
         )
         comp.append(i)
@@ -198,18 +188,24 @@ def main(arguments):
     os.remove("found.results")
 
 
-# define a function which goes back to the original working directory if it is called
-def odir(pwdorg):
-    try:
-        os.chdir(str(pwdorg))
-        # print("Current working directory: {0}".format(os.getcwd()))
-    except FileNotFoundError:
-        print("Directory does not exist")
-    except NotADirectoryError:
-        print(f"{pwdorg} is not a directory")
+class bcolors:
+    """
+    Class for colorizing the output.
+    """
+
+    HEADER = "\033[95m"
+    OKBLUE = "\033[94m"
+    OKCYAN = "\033[96m"
+    OKGREEN = "\033[92m"
+    WARNING = "\033[93m"
+    FAIL = "\033[91m"
+    ENDC = "\033[0m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
 
 
-if __name__ == "__main__":
+def console_entry_point() -> int:
+    # parse arguments
     parser = ap.ArgumentParser(description="Generate random molecules from PubChem")
     parser.add_argument(
         "-n",
@@ -221,3 +217,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     main(args)
+    return 0
+
+
+if __name__ == "__main__":
+    console_entry_point()
