@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import subprocess
 
-from .randommols import bcolors
+from .miscelleanous import bcolors
 
 
 def xtbopt(name: str) -> str:

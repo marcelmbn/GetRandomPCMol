@@ -44,94 +44,98 @@ def main(arguments: ap.Namespace) -> None:
         # Check if the directory exists and skip the CID if it does
         if os.path.exists(f"{i}/{i}.sdf"):
             existing_dirs = True
-            print(f"{bcolors.OKCYAN}\nDirectory {i} already exists.{bcolors.ENDC}")
-            comp.append(i)
-            print("[" + str(len(comp)) + "/" + str(numcomp) + "]")
-
-            # > break the loop if the number of successful downloads is equal to numcomp
-            if len(comp) >= numcomp:
-                break
-            continue
-
-        print(f"\nDownloading CID {i:7d} ...")
-        try:
-            pgout = subprocess.run(
-                ["PubGrep", "--input", "cid", str(i)],
-                check=True,
-                capture_output=True,
-                timeout=30,
+            print(
+                f"{bcolors.OKCYAN}\nDirectory {i} with SDF file already exists.{bcolors.ENDC}"
             )
-        except subprocess.TimeoutExpired as exc:
-            print(f"Process timed out.\n{exc}")
-            continue
-        except subprocess.CalledProcessError as exc:
-            print("Status : FAIL", exc.returncode, exc.output)
-            continue
-
-        # print the return code
-        if pgout.returncode != 0:
-            print("Return code:", pgout.returncode)
-
-        if pgout.stderr.decode("utf-8") == "":
-            print(" " * 3 + f"Downloaded {i} successfully.")
         else:
-            if "abnormal termination" in pgout.stderr.decode("utf-8"):
-                print(
-                    " " * 3
-                    + f"""{bcolors.WARNING}xTB error in conversion process - \
-skipping CID {i}.{bcolors.ENDC}"""
+            print(f"\nDownloading CID {i:7d} ...")
+            try:
+                pgout = subprocess.run(
+                    ["PubGrep", "--input", "cid", str(i)],
+                    check=True,
+                    capture_output=True,
+                    timeout=30,
                 )
+            except subprocess.TimeoutExpired as exc:
+                print(f"Process timed out.\n{exc}")
                 continue
-            elif not "normal termination" in pgout.stderr.decode("utf-8"):
-                print(
-                    " " * 3
-                    + f"{bcolors.WARNING}Unknown PubGrep/xTB conversion error - \
-skipping CID {i}.{bcolors.ENDC}"
-                )
-                errmess = "PubGrep_error" + str(i) + ".err"
-                with open(errmess, "w", encoding="UTF-8") as f:
-                    f.write(pgout.stderr.decode("utf-8"))
+            except subprocess.CalledProcessError as exc:
+                print("Status : FAIL", exc.returncode, exc.output)
                 continue
-            else:
-                print(" " * 3 + f"Downloaded {i:7d} successfully after xTB conversion.")
 
-        # print the first entry of the fourth line compund of interest in sdf format
-        with open(f"{i}.sdf", encoding="UTF-8") as f:
-            lines = f.readlines()
-            nat = int(lines[3].split()[0])
-            print(" " * 3 + f"# of atoms: {nat:8d}")
-            if int(nat) > maxnumat:
-                print(
-                    f"{bcolors.WARNING}Number of \
+            # print the return code
+            if pgout.returncode != 0:
+                print("Return code:", pgout.returncode)
+
+            if pgout.stderr.decode("utf-8") == "":
+                print(" " * 3 + f"Downloaded {i} successfully.")
+            else:
+                if "abnormal termination" in pgout.stderr.decode("utf-8"):
+                    print(
+                        " " * 3
+                        + f"""{bcolors.WARNING}xTB error in conversion process - \
+skipping CID {i}.{bcolors.ENDC}"""
+                    )
+                    continue
+                elif not "normal termination" in pgout.stderr.decode("utf-8"):
+                    print(
+                        " " * 3
+                        + f"{bcolors.WARNING}Unknown PubGrep/xTB conversion error - \
+skipping CID {i}.{bcolors.ENDC}"
+                    )
+                    errmess = "PubGrep_error" + str(i) + ".err"
+                    with open(errmess, "w", encoding="UTF-8") as f:
+                        f.write(pgout.stderr.decode("utf-8"))
+                    continue
+                else:
+                    print(
+                        " " * 3
+                        + f"Downloaded {i:7d} successfully after xTB conversion."
+                    )
+
+            # print the first entry of the fourth line compund of interest in sdf format
+            with open(f"{i}.sdf", encoding="UTF-8") as f:
+                lines = f.readlines()
+                nat = int(lines[3].split()[0])
+                print(" " * 3 + f"# of atoms: {nat:8d}")
+                if int(nat) > maxnumat:
+                    print(
+                        f"{bcolors.WARNING}Number of \
 atoms in {i}.sdf is larger than {maxnumat} - \
 skipping CID {i}.{bcolors.ENDC}"
-                )
-                # rm the sdf file
-                os.remove(f"{i}.sdf")
-                continue
+                    )
+                    # rm the sdf file
+                    os.remove(f"{i}.sdf")
+                    continue
 
-        direxists = create_directory(str(i))
-        shutil.copy2(f"{pwd}/{i}.sdf", f"{pwd}/{i}/{i}.sdf")
+            direxists = create_directory(str(i))
+            shutil.copy2(f"{pwd}/{i}.sdf", f"{pwd}/{i}/{i}.sdf")
+
         if opt:
             chdir(str(i))
             # copy the sdf file to the new directory
             # run xTB optimization
-            print(f"Running xTB optimization for CID {i} ...")
+            print(" " * 3 + f"Running xTB optimization for CID {i} ...")
             error = xtbopt(str(i))
             if error != "":
                 continue
             chdir(pwd)
+            print(
+                f"{bcolors.OKGREEN}Structure of \
+{i} successfully generated and optimized.{bcolors.ENDC}"
+            )
+        else:
+            print(
+                f"{bcolors.OKGREEN}Structure of \
+{i} successfully generated.{bcolors.ENDC}"
+            )
 
         # grep the name of the molecule from found.results (first entry in first line)
-        with open("found.results", encoding="UTF-8") as f:
-            first_line = f.readline()
-            molname.append(first_line.split()[0])
-            print(" " * 3 + f"Compound name: {molname[-1]:s}")
-
-        print(
-            f"{bcolors.OKGREEN}Structure of \
-{i} successfully generated and optimized.{bcolors.ENDC}"
-        )
+        if os.path.exists("found.results"):
+            with open("found.results", encoding="UTF-8") as f:
+                first_line = f.readline()
+                molname.append(first_line.split()[0])
+                print(f"Compound name: {bcolors.BOLD}{molname[-1]:s}{bcolors.ENDC}")
 
         # > remove the sdf file from the main directory if it exists
         if os.path.exists(f"{i}.sdf"):
