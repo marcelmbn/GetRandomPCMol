@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import argparse as ap
 import os
+import shutil
 import subprocess
 
 from numpy.random import RandomState
 
-from .miscelleanous import chdir, create_directory
+from .miscelleanous import bcolors, chdir, create_directory
+from .qmcalc import xtbopt
 
 
 def main(arguments: ap.Namespace) -> None:
@@ -20,23 +22,37 @@ def main(arguments: ap.Namespace) -> None:
     """
     # get number of compounds from command line
     numcomp = arguments.numcomp
+    opt = arguments.opt
 
     ### GENERAL PARAMETERS ###
-    maxcid = 10000000
-    maxnumat = 50
+    maxcid = 100000
+    maxnumat = 35
 
     # set the seed
     print(f"Generating random numbers between 1 and {maxcid:d} ...")
     seed = RandomState(2009)
-    values = seed.randint(1, maxcid, size=3 * numcomp)
+    values = seed.randint(1, maxcid, size=10 * numcomp)
     print("Done.")
 
     pwd = os.getcwd()
 
+    existing_dirs = False
     # run PubGrep for each value and set up a list with successful downloads
     comp: list[int] = []
     molname: list[str] = []
     for i in values:
+        # Check if the directory exists and skip the CID if it does
+        if os.path.exists(f"{i}/{i}.sdf"):
+            existing_dirs = True
+            print(f"{bcolors.OKCYAN}\nDirectory {i} already exists.{bcolors.ENDC}")
+            comp.append(i)
+            print("[" + str(len(comp)) + "/" + str(numcomp) + "]")
+
+            # > break the loop if the number of successful downloads is equal to numcomp
+            if len(comp) >= numcomp:
+                break
+            continue
+
         print(f"\nDownloading CID {i:7d} ...")
         try:
             pgout = subprocess.run(
@@ -62,17 +78,15 @@ def main(arguments: ap.Namespace) -> None:
             if "abnormal termination" in pgout.stderr.decode("utf-8"):
                 print(
                     " " * 3
-                    + f"""{bcolors.WARNING}xTB error in conversion process -
- skipping CID %7d {bcolors.ENDC}"""
-                    % i
+                    + f"""{bcolors.WARNING}xTB error in conversion process - \
+skipping CID {i}.{bcolors.ENDC}"""
                 )
                 continue
             elif not "normal termination" in pgout.stderr.decode("utf-8"):
                 print(
                     " " * 3
-                    + f"""{bcolors.WARNING}Unknown PubGrep/xTB conversion error -
- skipping CID %7d{bcolors.ENDC}"""
-                    % i
+                    + f"{bcolors.WARNING}Unknown PubGrep/xTB conversion error - \
+skipping CID {i}.{bcolors.ENDC}"
                 )
                 errmess = "PubGrep_error" + str(i) + ".err"
                 with open(errmess, "w", encoding="UTF-8") as f:
@@ -89,77 +103,24 @@ def main(arguments: ap.Namespace) -> None:
             if int(nat) > maxnumat:
                 print(
                     f"{bcolors.WARNING}Number of \
-atoms in {i}.sdf is larger than {maxnumat} -\
-skipping CID {i:7d}{bcolors.ENDC}"
+atoms in {i}.sdf is larger than {maxnumat} - \
+skipping CID {i}.{bcolors.ENDC}"
                 )
+                # rm the sdf file
+                os.remove(f"{i}.sdf")
                 continue
 
         direxists = create_directory(str(i))
-        chdir(str(i))
-        try:
-            pgout = subprocess.run(
-                ["xtb", f"{i}.sdf", "--opt"],
-                check=True,
-                capture_output=True,
-                timeout=120,
-            )
-            with open("xtb.out", "w", encoding="UTF-8") as f:
-                f.write(pgout.stdout.decode("utf-8"))
-        except subprocess.TimeoutExpired as exc:
-            print(" " * 3 + f"Process timed out.\n{exc}")
+        shutil.copy2(f"{pwd}/{i}.sdf", f"{pwd}/{i}/{i}.sdf")
+        if opt:
+            chdir(str(i))
+            # copy the sdf file to the new directory
+            # run xTB optimization
+            print(f"Running xTB optimization for CID {i} ...")
+            error = xtbopt(str(i))
+            if error != "":
+                continue
             chdir(pwd)
-            continue
-        except subprocess.CalledProcessError as exc:
-            print(
-                " " * 3 + f"{bcolors.FAIL}Status : FAIL{bcolors.ENDC}", exc.returncode
-            )
-            with open("xtb_error.out", "w", encoding="UTF-8") as f:
-                f.write(exc.output.decode("utf-8"))
-            with open("xtb_error.err", "w", encoding="UTF-8") as f:
-                f.write(pgout.stderr.decode("utf-8"))
-            print(
-                f"{bcolors.WARNING}xTB optimization failed - skipping CID %7d{bcolors.ENDC}"
-                % i
-            )
-            chdir(pwd)
-            continue
-
-        # load fourth entry of a line with ":: total charge" of xtb.out into a variable
-        chrg = 0
-        with open("xtb.out", encoding="UTF-8") as f:
-            lines = f.readlines()
-            for line in lines:
-                if ":: total charge" in line:
-                    chrg = round(float(line.split()[3]))
-        print(" " * 3 + f"Total charge: {chrg:6d}")
-        # write chrg to a file called .CHRG
-        with open(".CHRG", "w", encoding="UTF-8") as f:
-            f.write(str(chrg) + "\n")
-
-        try:
-            pgout = subprocess.run(
-                ["mctc-convert", "xtbopt.sdf", "struc.xyz"],
-                check=True,
-                capture_output=True,
-                timeout=120,
-            )
-        except subprocess.TimeoutExpired as exc:
-            print(" " * 3 + f"Process timed out.\n{exc}")
-            chdir(pwd)
-            continue
-        except subprocess.CalledProcessError as exc:
-            print(" " * 3 + "Status : FAIL", exc.returncode, exc.output)
-            # write the error output to a file
-            with open("mctc-convert_error.err", "w", encoding="UTF-8") as f:
-                f.write(pgout.stderr.decode("utf-8"))
-            print(
-                f"{bcolors.WARNING}mctc-convert failed - skipping CID %7d{bcolors.ENDC}"
-                % i
-            )
-            chdir(pwd)
-            continue
-
-        chdir(pwd)
 
         # grep the name of the molecule from found.results (first entry in first line)
         with open("found.results", encoding="UTF-8") as f:
@@ -168,45 +129,53 @@ skipping CID {i:7d}{bcolors.ENDC}"
             print(" " * 3 + f"Compound name: {molname[-1]:s}")
 
         print(
-            f"{bcolors.OKGREEN}Structure of\
- %7d successfully generated and optimized.{bcolors.ENDC}"
-            % i
+            f"{bcolors.OKGREEN}Structure of \
+{i} successfully generated and optimized.{bcolors.ENDC}"
         )
+
+        # > remove the sdf file from the main directory if it exists
+        if os.path.exists(f"{i}.sdf"):
+            os.remove(f"{i}.sdf")
+
+        # > append the CID to the list of successful downloads
         comp.append(i)
         print("[" + str(len(comp)) + "/" + str(numcomp) + "]")
+
+        # > break the loop if the number of successful downloads is equal to numcomp
         if len(comp) >= numcomp:
             break
+
+    # clean up
+    files_to_remove = [
+        "iupac",
+        "list.tmp",
+        "pubchem_data",
+        "found.results",
+    ]
+    for i in files_to_remove:
+        if os.path.exists(i):
+            os.remove(i)
 
     # print number of successful downloads
     print("\nNumber of successful downloads: ", len(comp))
     print("Compounds: ", comp)
 
     # write the list of successful downloads to a file
-    with open("compounds.txt", "w", encoding="UTF-8") as f:
-        for i in comp:
-            f.write(str(i) + " " + molname[comp.index(i)] + "\n")
-    os.remove("found.results")
-
-
-class bcolors:
-    """
-    Class for colorizing the output.
-    """
-
-    HEADER = "\033[95m"
-    OKBLUE = "\033[94m"
-    OKCYAN = "\033[96m"
-    OKGREEN = "\033[92m"
-    WARNING = "\033[93m"
-    FAIL = "\033[91m"
-    ENDC = "\033[0m"
-    BOLD = "\033[1m"
-    UNDERLINE = "\033[4m"
+    if not existing_dirs:
+        with open("compounds.txt", "w", encoding="UTF-8") as f:
+            for i in comp:
+                f.write(str(i) + " " + molname[comp.index(i)] + "\n")
+    else:
+        print(
+            f"{bcolors.BOLD}Some directories already existed. \
+The list of successful downloads was not written to a file.{bcolors.ENDC}"
+        )
 
 
 def console_entry_point() -> int:
     # parse arguments
     parser = ap.ArgumentParser(description="Generate random molecules from PubChem")
+
     parser.add_argument(
         "-n",
         "--numcomp",
@@ -215,6 +184,19 @@ def console_entry_point() -> int:
         help="Number of compounds to generate",
         required=True,
     )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s {version}".format(version="0.1.0"),
+    )
+    parser.add_argument(
+        "--opt",
+        action="store_true",
+        help="Optimize the generated structures with xTB",
+        required=False,
+        default=False,
+    )
+
     args = parser.parse_args()
     main(args)
     return 0
