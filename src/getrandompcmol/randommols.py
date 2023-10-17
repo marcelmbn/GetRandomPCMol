@@ -9,11 +9,12 @@ import argparse as ap
 import os
 import shutil
 import subprocess
+from multiprocessing import Pool
 
 from numpy.random import RandomState
 
 from .miscelleanous import bcolors, chdir, checkifinpath, create_directory
-from .qmcalc import xtbopt
+from .qmcalc import crest_sampling, xtbopt
 
 
 def main(arguments: ap.Namespace) -> None:
@@ -27,7 +28,7 @@ def main(arguments: ap.Namespace) -> None:
     # set the seed
     print(f"Generating random numbers between 1 and {arguments.maxcid:d} ...")
     seed = RandomState(arguments.seed)
-    values = seed.randint(1, arguments.maxcid, size=10 * numcomp)
+    values = seed.randint(1, arguments.maxcid, size=100 * numcomp)
     print("Done.")
 
     pwd = os.getcwd()
@@ -43,6 +44,19 @@ def main(arguments: ap.Namespace) -> None:
             print(
                 f"{bcolors.OKCYAN}\nDirectory {i} with SDF file already exists.{bcolors.ENDC}"
             )
+            with open(f"{i}/{i}.sdf", encoding="UTF-8") as f:
+                lines = f.readlines()
+                nat = int(lines[3].split()[0])
+                print(" " * 3 + f"# of atoms: {nat:8d}")
+                if int(nat) > arguments.maxnumat:
+                    print(
+                        f"{bcolors.WARNING}Number of \
+atoms in {i}.sdf is larger than {arguments.maxnumat} - \
+skipping CID {i}.{bcolors.ENDC}"
+                    )
+                    # rm the folder
+                    shutil.rmtree(f"{i}")
+                    continue
         else:
             print(f"\nDownloading CID {i:7d} ...")
             try:
@@ -151,6 +165,7 @@ skipping CID {i}.{bcolors.ENDC}"
         "list.tmp",
         "pubchem_data",
         "found.results",
+        "xtb_3d.out",
     ]
     for i in files_to_remove:
         if os.path.exists(i):
@@ -173,6 +188,26 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
         with open("compounds.txt", "w", encoding="UTF-8") as f:
             for i in comp:
                 f.write(str(i) + "\n")
+
+    print("")
+    print(f"{bcolors.HEADER}### CREST CONFORMER SEARCH ###{bcolors.ENDC}")
+
+    if arguments.crest:
+        crest_options: dict[str, int | float | str] = {
+            "nthreads": 8,
+            "mddump": 250,
+            "mdlen": "x0.75",
+        }
+        num_cores = 2
+        sum_cores = num_cores * crest_options["nthreads"]
+        print(
+            f"{bcolors.BOLD}Running CREST sampling with {sum_cores} cores.{bcolors.ENDC}"
+        )
+        with Pool(processes=num_cores) as p:
+            p.starmap(
+                crest_sampling,
+                zip([pwd] * len(comp), comp, [crest_options] * len(comp)),
+            )
 
 
 def console_entry_point() -> int:

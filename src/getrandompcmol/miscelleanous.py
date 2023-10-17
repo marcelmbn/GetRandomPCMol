@@ -32,7 +32,6 @@ def create_directory(name: str) -> bool:
         os.mkdir(name)
         exist = False
     else:
-        print(f"Directory {name} already exists.")
         exist = True
 
     # check if the new directory exists and raise an error and stop execution if not
