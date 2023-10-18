@@ -38,6 +38,10 @@ def main(arguments: ap.Namespace) -> None:
     # run PubGrep for each value and set up a list with successful downloads
     comp: list[int] = []
     molname: list[str] = []
+    #### Hard-code the CIDs for testing ####
+    # values = []
+    # values.append(870889)
+    ########################################
     for i in values:
         # Check if the directory exists and skip the CID if it does
         if os.path.exists(f"{i}/{i}.sdf"):
@@ -62,7 +66,7 @@ skipping CID {i}.{bcolors.ENDC}"
             print(f"\nDownloading CID {i:7d} ...")
             try:
                 pgout = subprocess.run(
-                    ["PubGrep", "--input", "cid", str(i)],
+                    ["PubGrep", "--input", "cid", str(i), "--output", "sdf"],
                     check=True,
                     capture_output=True,
                     timeout=30,
@@ -105,19 +109,26 @@ skipping CID {i}.{bcolors.ENDC}"
                     )
 
             # print the first entry of the fourth line compund of interest in sdf format
-            with open(f"{i}.sdf", encoding="UTF-8") as f:
-                lines = f.readlines()
-                nat = int(lines[3].split()[0])
-                print(" " * 3 + f"# of atoms: {nat:8d}")
-                if int(nat) > arguments.maxnumat:
-                    print(
-                        f"{bcolors.WARNING}Number of \
+            try:
+                with open(f"{pwd}/{i}.sdf", encoding="UTF-8") as f:
+                    lines = f.readlines()
+                    nat = int(lines[3].split()[0])
+                    print(" " * 3 + f"# of atoms: {nat:8d}")
+                    if int(nat) > arguments.maxnumat:
+                        print(
+                            f"{bcolors.WARNING}Number of \
 atoms in {i}.sdf is larger than {arguments.maxnumat} - \
 skipping CID {i}.{bcolors.ENDC}"
-                    )
-                    # rm the sdf file
-                    os.remove(f"{i}.sdf")
-                    continue
+                        )
+                        # rm the sdf file
+                        os.remove(f"{i}.sdf")
+                        continue
+            except FileNotFoundError:
+                print(
+                    f"{bcolors.WARNING}File {i}.sdf not found - \
+skipping CID {i}.{bcolors.ENDC}"
+                )
+                continue
 
             direxists = create_directory(str(i))
             shutil.copy2(f"{pwd}/{i}.sdf", f"{pwd}/{i}/{i}.sdf")
@@ -128,9 +139,9 @@ skipping CID {i}.{bcolors.ENDC}"
             # run xTB optimization
             print(" " * 3 + f"Running xTB optimization for CID {i} ...")
             error = xtbopt(str(i))
+            chdir(pwd)
             if error != "":
                 continue
-            chdir(pwd)
             print(
                 f"{bcolors.OKGREEN}Structure of \
 {i} successfully generated and optimized.{bcolors.ENDC}"
@@ -294,6 +305,13 @@ def console_entry_point() -> int:
         "--crest",
         action="store_true",
         help="Conformer sampling with CREST",
+        required=False,
+        default=False,
+    )
+    parser.add_argument(
+        "--evalconfonly",
+        action="store_true",
+        help="Evaluate produced conformer ensemble only.",
         required=False,
         default=False,
     )

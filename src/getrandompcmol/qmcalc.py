@@ -126,6 +126,17 @@ skipping CID {name}.{bcolors.ENDC}"
 
     conformer_prop: dict[str, int | float | list[float]] = {}
     conformer_prop["energies"] = []
+    # obtain number of atoms from opt.xyz
+    with open("opt.xyz", encoding="UTF-8") as f:
+        lines = f.readlines()
+        conformer_prop["natoms"] = int(lines[0].strip())
+    # obtain molecular charge from .CHRG
+    if os.path.exists(".CHRG"):
+        with open(".CHRG", encoding="UTF-8") as f:
+            lines = f.readlines()
+            conformer_prop["charge"] = int(lines[0].strip())
+    else:
+        conformer_prop["charge"] = 0
     # parse crest.out and get the number of conformers
     # the relevant line is "number of unique conformers for further calc"
     try:
