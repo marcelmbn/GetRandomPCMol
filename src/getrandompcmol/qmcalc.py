@@ -79,7 +79,7 @@ def xtbopt(name: str) -> str:
 
 def crest_sampling(
     homedir: str, name: str, crestsettings: dict[str, int | float | str]
-) -> dict[str, int]:
+) -> dict[str, int | float | list[float]]:
     """
     Function to run CREST sampling.
     """
@@ -94,7 +94,6 @@ def crest_sampling(
 
     chdir("crest")
 
-    # print(f"\nRunning CREST sampling for CID {name} ...")
     error = ""
     try:
         pgout = subprocess.run(
@@ -125,7 +124,8 @@ def crest_sampling(
         error = f"{bcolors.WARNING}CREST conformer search failed - \
 skipping CID {name}.{bcolors.ENDC}"
 
-    conformer_prop: dict[str, int] = {}
+    conformer_prop: dict[str, int | float | list[float]] = {}
+    conformer_prop["energies"] = []
     # parse crest.out and get the number of conformers
     # the relevant line is "number of unique conformers for further calc"
     try:
@@ -134,20 +134,20 @@ skipping CID {name}.{bcolors.ENDC}"
             for line in lines:
                 if "number of unique conformers for further calc" in line:
                     conformer_prop["nconf"] = int(line.split()[7])
-                    # print(
-                    #     f"{bcolors.BOLD}CID: {name}{bcolors.ENDC}: "
-                    #     + f"# of conformers: {bcolors.BOLD}{conformer_prop['nconf']}{bcolors.ENDC}"
-                    # )
                     break
     except FileNotFoundError:
         error = f"{bcolors.FAIL}CREST conformer search failed - \
 skipping CID {name}.{bcolors.ENDC}"
+    try:
+        with open("crest.energies", encoding="UTF-8") as f:
+            lines = f.readlines()
+            if isinstance(conformer_prop["energies"], list):
+                for line in lines:
+                    conformer_prop["energies"].append(float(line.split()[1]))
+    except FileNotFoundError:
+        error = f"{bcolors.FAIL}CREST conformer search failed - \
+skipping CID {name}.{bcolors.ENDC}"
 
-    # print(
-    #     f"{bcolors.OKGREEN}Conformer ensemble of \
-    # {name} successfully generated and optimized.{bcolors.ENDC}"
-    # )
-    # print the name of the finished CID in line, i.e. not with a line break before and after
     print(f"{name}, ", end="", flush=True)
     chdir(homedir)
 

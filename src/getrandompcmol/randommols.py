@@ -6,6 +6,7 @@ This script generates random molecules from PubChem and optimizes them with xTB.
 from __future__ import annotations
 
 import argparse as ap
+import json
 import os
 import shutil
 import subprocess
@@ -193,17 +194,29 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
     print(f"{bcolors.HEADER}### CREST CONFORMER SEARCH ###{bcolors.ENDC}")
 
     if arguments.crest:
+        # get number of cores
+        totalcores = os.cpu_count()
+        if totalcores is None:
+            totalcores = 4
+        else:
+            totalcores = int(totalcores)
+        num_cores = min(totalcores, len(comp))
+        n_threads = totalcores // num_cores
+
         crest_options: dict[str, int | float | str] = {
-            "nthreads": 2,
+            "nthreads": n_threads,
             "mddump": 250,
             "mdlen": "x0.75",
         }
-        num_cores = 10
-        sum_cores = num_cores * crest_options["nthreads"]
+        sum_cores = num_cores * n_threads
+        print(f"Number of detected cores on this machine: {totalcores}")
+        print(3 * " " + f"Number of cores per process: {n_threads}")
+        print(3 * " " + f"Number of parallel processes: {num_cores}")
         print(
             f"{bcolors.BOLD}Running CREST sampling with {sum_cores} cores.{bcolors.ENDC}"
         )
         print("Finished conformer search for compounds: ", end="", flush=True)
+        results: list[dict[str, int | float | list[float]]] = []
         with Pool(processes=num_cores) as p:
             results = p.starmap(
                 crest_sampling,
@@ -212,17 +225,25 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
         print(f"{bcolors.OKBLUE}done.{bcolors.ENDC}")
         for i, o in zip(comp, results):
             print(f"Number of conformers for CID {i}: {o['nconf']}")
-        # COPILOT suggestion
-        # with Pool(processes=num_cores) as p:
-        #     results = p.starmap_async(
-        #         crest_sampling,
-        #         zip([pwd] * len(comp), comp, [crest_options] * len(comp)),
-        #     )
-        #     results.wait()
-        #     output = results.get()
-        #     for i, o in zip(comp, output):
-        #         print(f"Output for CID {i}: {o}")
-        # print("")
+            # get first element of the list of energies
+            if isinstance(o["energies"], list):
+                energy_range = max(o["energies"]) - min(o["energies"])
+                mean_energy = sum(o["energies"]) / len(o["energies"])
+                print(
+                    3 * " " + f"Energy range of conformers: {energy_range:.3f} kcal/mol"
+                )
+                print(
+                    3 * " " + f"Mean energy of conformers:  {mean_energy:.3f} kcal/mol"
+                )
+                # Add the "energy_range" and "mean_energy" to the "o" dictionary
+                o["energy_range"] = energy_range
+                o["mean_energy"] = mean_energy
+                # Write the entire "o" dictionary to a JSON file in the directory
+                with open(f"{i}/conformer.json", "w", encoding="UTF-8") as f:
+                    json.dump(o, f, indent=4)
+
+    else:
+        print(f"{bcolors.BOLD}CREST conformer search was not requested.{bcolors.ENDC}")
 
 
 def console_entry_point() -> int:
@@ -285,8 +306,8 @@ def console_entry_point() -> int:
 
     # check if dependencies are installed
     checkifinpath("PubGrep")
+    checkifinpath("xtb")
     if args.opt:
-        checkifinpath("xtb")
         checkifinpath("mctc-convert")
     if args.crest:
         checkifinpath("crest")
