@@ -194,20 +194,35 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
 
     if arguments.crest:
         crest_options: dict[str, int | float | str] = {
-            "nthreads": 8,
+            "nthreads": 2,
             "mddump": 250,
             "mdlen": "x0.75",
         }
-        num_cores = 2
+        num_cores = 10
         sum_cores = num_cores * crest_options["nthreads"]
         print(
             f"{bcolors.BOLD}Running CREST sampling with {sum_cores} cores.{bcolors.ENDC}"
         )
+        print("Finished conformer search for compounds: ", end="", flush=True)
         with Pool(processes=num_cores) as p:
-            p.starmap(
+            results = p.starmap(
                 crest_sampling,
                 zip([pwd] * len(comp), comp, [crest_options] * len(comp)),
             )
+        print(f"{bcolors.OKBLUE}done.{bcolors.ENDC}")
+        for i, o in zip(comp, results):
+            print(f"Number of conformers for CID {i}: {o['nconf']}")
+        # COPILOT suggestion
+        # with Pool(processes=num_cores) as p:
+        #     results = p.starmap_async(
+        #         crest_sampling,
+        #         zip([pwd] * len(comp), comp, [crest_options] * len(comp)),
+        #     )
+        #     results.wait()
+        #     output = results.get()
+        #     for i, o in zip(comp, output):
+        #         print(f"Output for CID {i}: {o}")
+        # print("")
 
 
 def console_entry_point() -> int:

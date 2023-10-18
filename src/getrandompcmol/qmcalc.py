@@ -94,7 +94,7 @@ def crest_sampling(
 
     chdir("crest")
 
-    print(f"\nRunning CREST sampling for CID {name} ...")
+    # print(f"\nRunning CREST sampling for CID {name} ...")
     error = ""
     try:
         pgout = subprocess.run(
@@ -111,7 +111,6 @@ def crest_sampling(
             ],
             check=True,
             capture_output=True,
-            timeout=120,
         )
         with open("crest.out", "w", encoding="UTF-8") as f:
             f.write(pgout.stdout.decode("utf-8"))
@@ -135,19 +134,21 @@ skipping CID {name}.{bcolors.ENDC}"
             for line in lines:
                 if "number of unique conformers for further calc" in line:
                     conformer_prop["nconf"] = int(line.split()[7])
-                    print(
-                        f"{bcolors.BOLD}CID: {name}{bcolors.ENDC}: "
-                        + f"# of conformers: {bcolors.BOLD}{conformer_prop['nconf']}{bcolors.ENDC}"
-                    )
+                    # print(
+                    #     f"{bcolors.BOLD}CID: {name}{bcolors.ENDC}: "
+                    #     + f"# of conformers: {bcolors.BOLD}{conformer_prop['nconf']}{bcolors.ENDC}"
+                    # )
                     break
     except FileNotFoundError:
         error = f"{bcolors.FAIL}CREST conformer search failed - \
 skipping CID {name}.{bcolors.ENDC}"
 
-    print(
-        f"{bcolors.OKGREEN}Conformer ensemble of \
-{name} successfully generated and optimized.{bcolors.ENDC}"
-    )
+    # print(
+    #     f"{bcolors.OKGREEN}Conformer ensemble of \
+    # {name} successfully generated and optimized.{bcolors.ENDC}"
+    # )
+    # print the name of the finished CID in line, i.e. not with a line break before and after
+    print(f"{name}, ", end="", flush=True)
     chdir(homedir)
 
     return conformer_prop
