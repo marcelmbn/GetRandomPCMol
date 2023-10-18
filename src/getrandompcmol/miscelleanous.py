@@ -52,8 +52,12 @@ def chdir(dirname: str) -> None:
     try:
         os.chdir(str(dirname))
         # print("Current working directory: {0}".format(os.getcwd()))
-    except FileNotFoundError:
-        print(f"Directory: {dirname} does not exist")
+    except FileNotFoundError as e:
+        print(
+            f"{bcolors.FAIL}Directory: {dirname} does not exist. \
+Stopping here.{bcolors.ENDC}"
+        )
+        raise SystemExit(1) from e
     except NotADirectoryError:
         print(f"{dirname} is not a directory")
     except PermissionError:

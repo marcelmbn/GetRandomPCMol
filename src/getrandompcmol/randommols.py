@@ -14,6 +14,7 @@ from multiprocessing import Pool
 
 from numpy.random import RandomState
 
+from .evaluate_conf import eval_conf_ensemble
 from .miscelleanous import bcolors, chdir, checkifinpath, create_directory
 from .qmcalc import crest_sampling, xtbopt
 
@@ -266,7 +267,7 @@ def console_entry_point() -> int:
         type=int,
         default=2,
         help="Number of compounds to generate",
-        required=True,
+        required=False,
     )
     parser.add_argument(
         "--version",
@@ -321,6 +322,26 @@ def console_entry_point() -> int:
     # check for inconsistencies between arguments
     if (not args.opt) and args.crest:
         print(f"{bcolors.WARNING}You cannot use both --opt and --crest.{bcolors.ENDC}")
+
+    if args.evalconfonly:
+        # get the list of directories from compounds.txt
+        dirs = []
+        try:
+            with open("compounds.txt", encoding="UTF-8") as f:
+                lines = f.readlines()
+                for line in lines:
+                    dirs.append(int(line.strip().split()[0]))
+        except FileNotFoundError as e:
+            print(f"{bcolors.FAIL}Error: {e}{bcolors.ENDC}")
+            print(
+                f"{bcolors.FAIL}File 'compounds.txt' not found \
+and no compound directories provided.{bcolors.ENDC}"
+            )
+            raise SystemExit(1) from e
+
+        eval_conf_ensemble(5, 10, dirs)
+        # exit the program
+        return 0
 
     # check if dependencies are installed
     checkifinpath("PubGrep")
