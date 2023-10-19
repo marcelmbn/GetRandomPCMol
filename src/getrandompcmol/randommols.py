@@ -362,6 +362,14 @@ Provide the lower and upper limit for the number of conformers.",
         )
         raise SystemExit(1)
 
+    # check if dependencies are installed
+    checkifinpath("PubGrep")
+    checkifinpath("xtb")
+    if args.opt:
+        checkifinpath("mctc-convert")
+    if args.crest:
+        checkifinpath("crest")
+
     if args.evalconfonly:
         # get the list of directories from compounds.txt
         dirs = []
@@ -382,13 +390,6 @@ and no compound directories provided.{bcolors.ENDC}"
         # exit the program
         return 0
 
-    # check if dependencies are installed
-    checkifinpath("PubGrep")
-    checkifinpath("xtb")
-    if args.opt:
-        checkifinpath("mctc-convert")
-    if args.crest:
-        checkifinpath("crest")
     main(args)
     return 0
 

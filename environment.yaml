@@ -1,0 +1,10 @@
+# conda env create -f environment.yaml
+name: numgradpy
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - black
+  - numpy
+  - pre-commit
+  - pylint
