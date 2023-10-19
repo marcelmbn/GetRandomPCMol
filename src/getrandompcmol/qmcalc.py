@@ -93,6 +93,22 @@ def crest_sampling(
         shutil.copy2(".CHRG", "crest/")
 
     chdir("crest")
+    conformer_prop: dict[str, str | int | float | list[float]] = {}
+    # initialize conformer_prop with default values
+    conformer_prop["name"] = name
+    # obtain molecular charge from .CHRG
+    if os.path.exists(".CHRG"):
+        with open(".CHRG", encoding="UTF-8") as f:
+            lines = f.readlines()
+            conformer_prop["charge"] = int(lines[0].strip())
+    else:
+        conformer_prop["charge"] = 0
+    # obtain number of atoms from opt.xyz
+    with open("opt.xyz", encoding="UTF-8") as f:
+        lines = f.readlines()
+        conformer_prop["natoms"] = int(lines[0].strip())
+    conformer_prop["energies"] = []
+    conformer_prop["nconf"] = 0
 
     error = ""
     try:
@@ -115,29 +131,17 @@ def crest_sampling(
             f.write(pgout.stdout.decode("utf-8"))
         with open("crest.err", "w", encoding="UTF-8") as f:
             f.write(pgout.stderr.decode("utf-8"))
-    except subprocess.TimeoutExpired as exc:
-        error = " " * 3 + f"Process timed out.\n{exc}"
     except subprocess.CalledProcessError as exc:
-        print(" " * 3 + f"{bcolors.FAIL}Status : FAIL{bcolors.ENDC}", exc.returncode)
+        print(
+            f"{bcolors.FAIL}Status : FAIL for {name} with code {exc.returncode}{bcolors.ENDC}, ",
+            end="",
+            flush=True,
+        )
         with open("crest_error.out", "w", encoding="UTF-8") as f:
             f.write(exc.output.decode("utf-8"))
-        error = f"{bcolors.WARNING}CREST conformer search failed - \
-skipping CID {name}.{bcolors.ENDC}"
+        chdir(homedir)
+        return conformer_prop
 
-    conformer_prop: dict[str, str | int | float | list[float]] = {}
-    conformer_prop["name"] = name
-    conformer_prop["energies"] = []
-    # obtain number of atoms from opt.xyz
-    with open("opt.xyz", encoding="UTF-8") as f:
-        lines = f.readlines()
-        conformer_prop["natoms"] = int(lines[0].strip())
-    # obtain molecular charge from .CHRG
-    if os.path.exists(".CHRG"):
-        with open(".CHRG", encoding="UTF-8") as f:
-            lines = f.readlines()
-            conformer_prop["charge"] = int(lines[0].strip())
-    else:
-        conformer_prop["charge"] = 0
     # parse crest.out and get the number of conformers
     # the relevant line is "number of unique conformers for further calc"
     try:
@@ -148,8 +152,12 @@ skipping CID {name}.{bcolors.ENDC}"
                     conformer_prop["nconf"] = int(line.split()[7])
                     break
     except FileNotFoundError:
-        error = f"{bcolors.FAIL}CREST conformer search failed - \
+        print(
+            f"{bcolors.FAIL}CREST conformer search failed - \
 skipping CID {name}.{bcolors.ENDC}"
+        )
+        chdir(homedir)
+        return conformer_prop
     try:
         with open("crest.energies", encoding="UTF-8") as f:
             lines = f.readlines()
@@ -157,8 +165,13 @@ skipping CID {name}.{bcolors.ENDC}"
                 for line in lines:
                     conformer_prop["energies"].append(float(line.split()[1]))
     except FileNotFoundError:
-        error = f"{bcolors.FAIL}CREST conformer search failed - \
+        print(
+            f"{bcolors.FAIL}CREST conformer search failed - \
 skipping CID {name}.{bcolors.ENDC}"
+        )
+        conformer_prop["nconf"] = 0
+        chdir(homedir)
+        return conformer_prop
 
     print(f"{name}, ", end="", flush=True)
     chdir(homedir)

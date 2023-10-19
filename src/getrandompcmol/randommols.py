@@ -41,7 +41,8 @@ def main(arguments: ap.Namespace) -> None:
     molname: list[str] = []
     #### Hard-code the CIDs for testing ####
     # values = []
-    # values.append(870889)
+    # values.append(792349)
+    # values.append(47090)
     ########################################
     for i in values:
         # Check if the directory exists and skip the CID if it does
@@ -169,7 +170,7 @@ skipping CID {i}.{bcolors.ENDC}"
             os.remove(f"{i}.sdf")
 
         # > append the CID to the list of successful downloads
-        comp.append(i)
+        comp.append(int(i))
         print("[" + str(len(comp)) + "/" + str(numcomp) + "]")
 
         # > break the loop if the number of successful downloads is equal to numcomp
@@ -243,17 +244,27 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
             print(f"Number of conformers for CID {i}: {o['nconf']}")
             # get first element of the list of energies
             if isinstance(o["energies"], list):
-                energy_range = max(o["energies"]) - min(o["energies"])
-                mean_energy = sum(o["energies"]) / len(o["energies"])
-                print(
-                    3 * " " + f"Energy range of conformers: {energy_range:.3f} kcal/mol"
-                )
-                print(
-                    3 * " " + f"Mean energy of conformers:  {mean_energy:.3f} kcal/mol"
-                )
-                # Add the "energy_range" and "mean_energy" to the "o" dictionary
-                o["energy_range"] = energy_range
-                o["mean_energy"] = mean_energy
+                if len(o["energies"]) > 1:
+                    energy_range = max(o["energies"]) - min(o["energies"])
+                    print(
+                        3 * " "
+                        + f"Energy range of conformers: {energy_range:.3f} kcal/mol"
+                    )
+                    # Add the "energy_range" and "mean_energy" to the "o" dictionary
+                    o["energy_range"] = energy_range
+                else:
+                    o["energy_range"] = 0.0
+
+                if len(o["energies"]) > 0:
+                    mean_energy = sum(o["energies"]) / len(o["energies"])
+                    print(
+                        3 * " "
+                        + f"Mean energy of conformers:  {mean_energy:.3f} kcal/mol"
+                    )
+                    o["mean_energy"] = mean_energy
+                else:
+                    o["mean_energy"] = 0.0
+
                 # Write the entire "o" dictionary to a JSON file in the directory
                 with open(f"{i}/conformer.json", "w", encoding="UTF-8") as f:
                     json.dump(o, f, indent=4)
