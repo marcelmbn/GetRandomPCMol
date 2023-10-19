@@ -14,12 +14,12 @@ Python program for obtaining random PubChem molecules and generating conformer e
 
 ## Installation
 
-After cloning the code via `git clone git@github.com:grimme-lab/NumgradPy.git`, a new virtual `conda` environment with required Python pre-requisites can be set up with:
+After cloning the code via `git clone git@github.com:grimme-lab/GetRandomPCMol.git`, a new virtual `conda` environment with required Python pre-requisites can be set up with:
 ```
 conda env create -f environment.yml
-conda activate numgradpy
+conda activate getrandompcmol
 ```
-`numgradpy` can be installed into this environment with 
+`getrandompcmol` can be installed into this environment with 
 ```
 pip install -e .
 ```
