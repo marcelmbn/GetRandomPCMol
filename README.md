@@ -8,9 +8,9 @@ Python program for obtaining random PubChem molecules and generating conformer e
 
 `getrandompcmol` in its current state depends on existing installations of 
 - the `xtb` program package for optimization and MDs/MTDs (for details and installation instructions, see [github.com/grimme-lab/xtb](https://github.com/grimme-lab/xtb))
-- the `mctc-convert` executable that can be obtained from the `mctc-lib` (for details and installation instructions, see [github.com/grimme-lab/mctc-lib](https://github.com/grimme-lab/mctc-lib))
-- the `PubGrep` bash script for downloading PubChem molecules based on their CID (for details, see [github.com/grimme-lab/PubGrep](https://github.com/grimme-lab/PubGrep))
-- if conformer search is desired: `crest` for creating conformer ensembles from a given structure file (for details, see [github.com/crest-lab/crest](https://github.com/grimme-lab/PubGrep)](https://github.com/crest-lab/crest))
+- the `mctc-convert` executable that can be obtained from the `mctc-lib` library (for details and installation instructions, see [github.com/grimme-lab/mctc-lib](https://github.com/grimme-lab/mctc-lib))
+- the `PubGrep` script for downloading PubChem molecules based on their CID (for details, see [github.com/grimme-lab/PubGrep](https://github.com/grimme-lab/PubGrep))
+- _if conformer search is desired_: `crest` for creating conformer ensembles from a given structure file (for details, see [github.com/crest-lab/crest](https://github.com/grimme-lab/PubGrep)](https://github.com/crest-lab/crest))
 
 ## Installation
 
@@ -40,11 +40,11 @@ The distinct keywords are described as follows:
 - `--seed <int>`: Starting seed for random number generation.
 - `--evalconf <int> <int>`: Range of conformer ensemble size allowed for post-processing.
 
-Further information can be found via `--help`.
+If only the evaluation and post-processing of a previously generated conformer ensemble is desired, use ``--evalconfonly``. Further information on possible input flags is available via `--help`.
 
 CIDs and names of generated molecules are saved into a file `compounds.txt`. Additionally, (if `--crest`) is active, each directory contains a file `conformer.json`, in which relevant properties of the generated ensemble are saved.
 
-The `crest` conformer ensemble generation is executed in parallel. The parallelization is actively set depending on the number of available cores on your machine and the requested number of molecules.
+The `crest` conformer ensemble generation is executed in parallel. The parallelization adapts to the number of available cores on your machine and the requested number of molecules.
 
 ## Source code
 
