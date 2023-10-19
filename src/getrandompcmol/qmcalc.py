@@ -79,7 +79,7 @@ def xtbopt(name: str) -> str:
 
 def crest_sampling(
     homedir: str, name: str, crestsettings: dict[str, int | float | str]
-) -> dict[str, int | float | list[float]]:
+) -> dict[str, str | int | float | list[float]]:
     """
     Function to run CREST sampling.
     """
@@ -124,7 +124,8 @@ def crest_sampling(
         error = f"{bcolors.WARNING}CREST conformer search failed - \
 skipping CID {name}.{bcolors.ENDC}"
 
-    conformer_prop: dict[str, int | float | list[float]] = {}
+    conformer_prop: dict[str, str | int | float | list[float]] = {}
+    conformer_prop["name"] = name
     conformer_prop["energies"] = []
     # obtain number of atoms from opt.xyz
     with open("opt.xyz", encoding="UTF-8") as f:

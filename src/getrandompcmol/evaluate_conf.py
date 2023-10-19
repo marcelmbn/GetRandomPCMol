@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 
 from numpy.random import RandomState
 
@@ -35,7 +36,7 @@ desired per ensemble: {maxnumconf}{bcolors.ENDC}"
 
     pwd = os.getcwd()
     # go through directories and evaluate the conformer ensemble
-    conf_props = []
+    conf_props: list[dict[str, str | int | float | list[float]]] = []
     for i in mols:
         chdir(str(i))
         # read the conformer.json file in the directory
@@ -58,6 +59,8 @@ in directory {i}.{bcolors.ENDC}"
 Number of conformers ({conformer['nconf']}) in {i} is less than \
 the minimum number of conformers ({minnumconf}). Skipping...{bcolors.ENDC}"
             )
+            chdir(pwd)
+            continue
         if conformer["nconf"] > maxnumconf:
             print(
                 f"{bcolors.OKCYAN}Number of conformers ({conformer['nconf']}) \
@@ -83,6 +86,27 @@ Truncating the ensemble randomly to {maxnumconf}...{bcolors.ENDC}"
         else:
             conformer["indices"] = list(range(1, conformer["nconf"] + 1))
 
+        # create a subdirectory for each conformer
+        # and copy the relevant structure files to it (see below)
+        if os.path.exists("index.conformers"):
+            os.remove("index.conformers")
+        for j in conformer["indices"]:
+            direxist = create_directory(str(j))
+            if conformer["charge"] != 0:
+                # copy the .CHRG file to the new directory
+                if os.path.exists(".CHRG"):
+                    shutil.copy2(".CHRG", str(j))
+                else:
+                    print(
+                        f"{bcolors.FAIL}Fail: \
+File '.CHRG' not found in directory {i} even though it is allocated.{bcolors.ENDC}"
+                    )
+                    chdir(pwd)
+                    raise SystemExit(1)
+            # append the conformer index (the dir name) to a list for later use
+            with open("index.conformers", "a", encoding="UTF-8") as f:
+                f.write(f"{j}\n")
+
         # read the relevant structures (the index) from the crest_conformers.xyz file
         # and write them to a new file
         try:
@@ -92,7 +116,7 @@ Truncating the ensemble randomly to {maxnumconf}...{bcolors.ENDC}"
                 for j in conformer["indices"]:
                     # read the structure of the conformer index
                     # and write it to the file "conformer["index"].xyz"
-                    with open(f"{j}.xyz", "w", encoding="UTF-8") as g:
+                    with open(f"{j}/{j}.xyz", "w", encoding="UTF-8") as g:
                         line = (j - 1) * (conformer["natoms"] + 2)
                         g.write(lines[line])
                         for k in range(conformer["natoms"] + 1):
@@ -107,6 +131,9 @@ in directory {i}/crest.{bcolors.ENDC}"
             chdir(pwd)
             raise SystemExit(1) from e
 
+        # check if the name of the molecule is part of 'conformer'. If not, append it.
+        if "name" not in conformer:
+            conformer["name"] = i
         # append the conformer properties to the list
         conf_props.append(conformer)
         # print the single properties for the conformer of interest
@@ -120,3 +147,8 @@ in directory {i}/crest.{bcolors.ENDC}"
             print(f"Conformer indices: {conformer['indices']}")
         print("")
         chdir(pwd)
+
+    # write the compounds with eligible conformer ensembles to a file
+    with open("compounds.conformers.txt", "w", encoding="UTF-8") as f:
+        for confdict in conf_props:
+            f.write(f"{confdict['name']}\n")

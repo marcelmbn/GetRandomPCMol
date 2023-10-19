@@ -228,7 +228,7 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
             f"{bcolors.BOLD}Running CREST sampling with {sum_cores} cores.{bcolors.ENDC}"
         )
         print("Finished conformer search for compounds: ", end="", flush=True)
-        results: list[dict[str, int | float | list[float]]] = []
+        results: list[dict[str, str | int | float | list[float]]] = []
         with Pool(processes=num_cores) as p:
             results = p.starmap(
                 crest_sampling,
@@ -253,6 +253,9 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
                 # Write the entire "o" dictionary to a JSON file in the directory
                 with open(f"{i}/conformer.json", "w", encoding="UTF-8") as f:
                     json.dump(o, f, indent=4)
+
+        if arguments.evalconf:
+            eval_conf_ensemble(arguments.evalconf[0], arguments.evalconf[1], comp)
 
     else:
         print(f"{bcolors.BOLD}CREST conformer search was not requested.{bcolors.ENDC}")
@@ -311,8 +314,21 @@ def console_entry_point() -> int:
     )
     parser.add_argument(
         "--evalconfonly",
-        action="store_true",
-        help="Evaluate produced conformer ensemble only.",
+        # store two integers as lower and upper limit for the number of conformers
+        nargs=2,
+        type=int,
+        help="ONLY evaluate the conformer ensemble. \
+Provide the lower and upper limit for the number of conformers.",
+        required=False,
+        default=False,
+    )
+    parser.add_argument(
+        "--evalconf",
+        # store two integers as lower and upper limit for the number of conformers
+        nargs=2,
+        type=int,
+        help="Evaluate the conformer ensemble. \
+Provide the lower and upper limit for the number of conformers.",
         required=False,
         default=False,
     )
@@ -321,7 +337,26 @@ def console_entry_point() -> int:
 
     # check for inconsistencies between arguments
     if (not args.opt) and args.crest:
-        print(f"{bcolors.WARNING}You cannot use both --opt and --crest.{bcolors.ENDC}")
+        print(
+            f"{bcolors.FAIL}You cannot leave --opt out and use --crest.{bcolors.ENDC}"
+        )
+        raise SystemExit(1)
+    if (not args.opt) and args.evalconf:
+        print(
+            f"{bcolors.FAIL}You cannot leave --opt out and use --evalconf.{bcolors.ENDC}"
+        )
+        raise SystemExit(1)
+    if (not args.crest) and args.evalconf:
+        print(
+            f"{bcolors.FAIL}You cannot leave --crest out and use --evalconf.{bcolors.ENDC}"
+        )
+        raise SystemExit(1)
+    # raise an error if --evalconfonly is used with any other argument
+    if args.evalconfonly and (args.opt or args.crest or args.evalconf):
+        print(
+            f"{bcolors.FAIL}You cannot use --evalconfonly with any other argument.{bcolors.ENDC}"
+        )
+        raise SystemExit(1)
 
     if args.evalconfonly:
         # get the list of directories from compounds.txt
@@ -339,7 +374,7 @@ and no compound directories provided.{bcolors.ENDC}"
             )
             raise SystemExit(1) from e
 
-        eval_conf_ensemble(5, 10, dirs)
+        eval_conf_ensemble(args.evalconfonly[0], args.evalconfonly[1], dirs)
         # exit the program
         return 0
 
