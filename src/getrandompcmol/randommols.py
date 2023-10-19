@@ -92,6 +92,8 @@ skipping CID {i}.{bcolors.ENDC}"
                         + f"""{bcolors.WARNING}xTB error in conversion process - \
 skipping CID {i}.{bcolors.ENDC}"""
                     )
+                    if os.path.exists(f"{i}.sdf"):
+                        os.remove(f"{i}.sdf")
                     continue
                 elif not "normal termination" in pgout.stderr.decode("utf-8"):
                     print(
@@ -102,6 +104,8 @@ skipping CID {i}.{bcolors.ENDC}"
                     errmess = "PubGrep_error" + str(i) + ".err"
                     with open(errmess, "w", encoding="UTF-8") as f:
                         f.write(pgout.stderr.decode("utf-8"))
+                    if os.path.exists(f"{i}.sdf"):
+                        os.remove(f"{i}.sdf")
                     continue
                 else:
                     print(
