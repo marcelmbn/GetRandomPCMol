@@ -13,7 +13,8 @@ from scipy.stats import spearmanr
 from .miscelleanous import bcolors, chdir
 
 # define a general parameter for the evaluation of the conformer ensemble
-HARTREE2KCAL = 627.5094740631
+HARTREE2KCAL = 627.5094740631  # Hartree
+MINDIFF = 0.05  # kcal/mol
 
 
 def get_calc_ensemble() -> dict[int, dict[str, list[int | float]]]:
@@ -110,12 +111,48 @@ Directory 'TZ' not found in {j}.{bcolors.ENDC}"
 
             chdir(moldir)
 
+        # check if energy values in the reference are closer to each other than
+        # the minimum difference. For that, go through all combinations of energies
+        # and check if the difference is smaller than the minimum difference.
+
+        if len(tmpwb97xd4) > 2:
+            while True:
+                conformer_deleted = (
+                    False  # Initialize a flag tracking whether a conformer was deleted
+                )
+                for k in range(1, len(tmpwb97xd4)):
+                    if len(tmpwb97xd4) <= 3:
+                        break
+                    if (
+                        abs((tmpwb97xd4[k] - tmpwb97xd4[k - 1]) * HARTREE2KCAL)
+                        < MINDIFF
+                    ):
+                        # delete the conformer with the higher energy
+                        if tmpwb97xd4[k] > tmpwb97xd4[k - 1]:
+                            del tmpwb97xd4[k]
+                            del tmpgfn2[k]
+                            del tmpgp3[k]
+                            del tmpindex[k]
+                            del conformer[k]
+                        else:
+                            del tmpwb97xd4[k - 1]
+                            del tmpgfn2[k - 1]
+                            del tmpgp3[k - 1]
+                            del tmpindex[k - 1]
+                            del conformer[k - 1]
+                        conformer_deleted = True  # Set the flag to True
+                        print(
+                            f"{bcolors.WARNING}Warning: \
+a conformer was deleted in {i} due to too close-lying energies.{bcolors.ENDC}"
+                        )
+                        break  # Break out of the for loop
+                if not conformer_deleted:
+                    # If no conformers were deleted in the current iteration,
+                    # break out of the while loop
+                    break
+
         # sort the energies in ascending order with the TZ/wB97X-D4 energies as reference
-        # This means that the energies should be sorted according to TZ in ascending order and
         # the GFN2 and GP3 energies should be sorted with the same indices as the TZ energies.
-        # This is done by sorting the indices of the TZ energies and then sorting the GFN2 and GP3
-        # energies with the same indices.
-        # The indices are sorted in ascending order.
 
         energies[i] = {}
         energies[i]["GFN2"] = []
