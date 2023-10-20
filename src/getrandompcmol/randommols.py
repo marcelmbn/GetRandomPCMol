@@ -148,6 +148,8 @@ skipping CID {i}.{bcolors.ENDC}"
             error = xtbopt(str(i))
             chdir(pwd)
             if error != "":
+                if os.path.exists(f"{i}.sdf"):
+                    os.remove(f"{i}.sdf")
                 continue
             print(
                 f"{bcolors.OKGREEN}Structure of \

@@ -99,7 +99,6 @@ Truncating the ensemble randomly to {maxnumconf}...{bcolors.ENDC}"
                     f"{bcolors.WARNING}Warning: \
 Directory {j} already exists. Skipping...{bcolors.ENDC}"
                 )
-                continue
             if conformer["charge"] != 0:
                 # copy the .CHRG file to the new directory
                 if os.path.exists(".CHRG"):

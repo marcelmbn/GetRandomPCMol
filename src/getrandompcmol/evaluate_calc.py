@@ -44,7 +44,6 @@ File 'compounds.conformers.txt' not found.{bcolors.ENDC}"
     indices: list[int] = []
     for i in mols:
         chdir(str(i))
-        # read the conformer.json file in the directory
         try:
             with open("index.conformers", encoding="UTF-8") as f:
                 lines = f.readlines()
@@ -53,6 +52,19 @@ File 'compounds.conformers.txt' not found.{bcolors.ENDC}"
             print(f"{bcolors.FAIL}Error: {e}{bcolors.ENDC}")
             print(
                 f"{bcolors.FAIL}File 'index.conformers' not found \
+in directory {i}.{bcolors.ENDC}"
+            )
+            chdir(pwd)
+            raise SystemExit(1) from e
+
+        # read the conformer.json file in the directory
+        try:
+            with open("conformer.json", encoding="UTF-8") as f:
+                conformer_prop = json.load(f)
+        except FileNotFoundError as e:
+            print(f"{bcolors.FAIL}Error: {e}{bcolors.ENDC}")
+            print(
+                f"{bcolors.FAIL}File 'conformer.json' not found \
 in directory {i}.{bcolors.ENDC}"
             )
             chdir(pwd)
@@ -185,6 +197,11 @@ a conformer was deleted in {i} due to too close-lying energies.{bcolors.ENDC}"
                 energies[i]["GFN2"].append((tmpgfn2[j] - tmpgfn2[0]) * HARTREE2KCAL)
                 energies[i]["GP3"].append((tmpgp3[j] - tmpgp3[0]) * HARTREE2KCAL)
                 energies[i]["conformer_index"].append(tmpindex[j])
+
+        # add the conformer_prop infos to the energies dict
+        energies[i]["natoms"] = conformer_prop["natoms"]
+        energies[i]["charge"] = conformer_prop["charge"]
+        energies[i]["nconf"] = conformer_prop["nconf"]
 
         chdir(pwd)
 
