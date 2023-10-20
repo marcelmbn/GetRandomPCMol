@@ -14,6 +14,7 @@ from multiprocessing import Pool
 
 from numpy.random import RandomState
 
+from .evaluate_calc import eval_calc_ensemble, get_calc_ensemble
 from .evaluate_conf import eval_conf_ensemble
 from .miscelleanous import bcolors, chdir, checkifinpath, create_directory
 from .qmcalc import crest_sampling, xtbopt
@@ -347,6 +348,13 @@ Provide the lower and upper limit for the number of conformers.",
         required=False,
         default=False,
     )
+    parser.add_argument(
+        "--evalcalconly",
+        action="store_true",
+        help="Only evaluate the QM calculations.",
+        required=False,
+        default=False,
+    )
 
     args = parser.parse_args()
 
@@ -399,6 +407,11 @@ and no compound directories provided.{bcolors.ENDC}"
 
         eval_conf_ensemble(args.evalconfonly[0], args.evalconfonly[1], dirs)
         # exit the program
+        return 0
+
+    if args.evalcalconly:
+        calcenergies = get_calc_ensemble()
+        eval_calc_ensemble(calcenergies)
         return 0
 
     main(args)

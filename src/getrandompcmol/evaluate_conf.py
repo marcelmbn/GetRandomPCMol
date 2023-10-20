@@ -68,7 +68,9 @@ in {i} is greater than the maximum number of conformers ({maxnumconf}). \
 Truncating the ensemble randomly to {maxnumconf}...{bcolors.ENDC}"
             )
             seed = RandomState(1995)
-            values = seed.randint(1, conformer["nconf"] + 1, maxnumconf)
+            # create a list of 'maxnumconf' random integers between 1 and conformer["nconf"]
+            # WITHOUT redundancies
+            values = seed.choice(conformer["nconf"], maxnumconf, replace=False) + 1
             # sort the values in ascending order
             values.sort()
             # take only the conformers with indices in values
@@ -92,6 +94,12 @@ Truncating the ensemble randomly to {maxnumconf}...{bcolors.ENDC}"
             os.remove("index.conformers")
         for j in conformer["indices"]:
             direxist = create_directory(str(j))
+            if direxist:
+                print(
+                    f"{bcolors.WARNING}Warning: \
+Directory {j} already exists. Skipping...{bcolors.ENDC}"
+                )
+                continue
             if conformer["charge"] != 0:
                 # copy the .CHRG file to the new directory
                 if os.path.exists(".CHRG"):
