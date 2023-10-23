@@ -76,9 +76,13 @@ skipping CID {i}.{bcolors.ENDC}"
                 )
             except subprocess.TimeoutExpired as exc:
                 print(f"Process timed out.\n{exc}")
+                if os.path.exists(f"{i}.sdf"):
+                    os.remove(f"{i}.sdf")
                 continue
             except subprocess.CalledProcessError as exc:
                 print("Status : FAIL", exc.returncode, exc.output)
+                if os.path.exists(f"{i}.sdf"):
+                    os.remove(f"{i}.sdf")
                 continue
 
             # print the return code
@@ -110,10 +114,10 @@ skipping CID {i}.{bcolors.ENDC}"
                         os.remove(f"{i}.sdf")
                     continue
                 else:
-                    print(
-                        " " * 3
-                        + f"Downloaded {i:7d} successfully after xTB conversion."
-                    )
+                    print(" " * 3 + f"Unknown PubGrep error for {i:7d}.")
+                    if os.path.exists(f"{i}.sdf"):
+                        os.remove(f"{i}.sdf")
+                    continue
 
             # print the first entry of the fourth line compund of interest in sdf format
             try:
@@ -135,6 +139,8 @@ skipping CID {i}.{bcolors.ENDC}"
                     f"{bcolors.WARNING}File {i}.sdf not found - \
 skipping CID {i}.{bcolors.ENDC}"
                 )
+                if os.path.exists(f"{i}.sdf"):
+                    os.remove(f"{i}.sdf")
                 continue
 
             direxists = create_directory(str(i))

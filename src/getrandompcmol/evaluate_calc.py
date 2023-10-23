@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 
 import numpy as np
 from scipy.stats import spearmanr
@@ -14,7 +15,7 @@ from .miscelleanous import bcolors, chdir
 
 # define a general parameter for the evaluation of the conformer ensemble
 HARTREE2KCAL = 627.5094740631  # Hartree
-MINDIFF = 0.05  # kcal/mol
+MINDIFF = 0.01  # kcal/mol
 
 
 def get_calc_ensemble() -> dict[int, dict[str, list[int | float]]]:
@@ -41,7 +42,6 @@ File 'compounds.conformers.txt' not found.{bcolors.ENDC}"
         raise SystemExit(1) from e
 
     energies: dict[int, dict[str, list[int | float]]] = {}
-    indices: list[int] = []
     for i in mols:
         chdir(str(i))
         try:
@@ -87,10 +87,12 @@ in {i} is {len(conformer)}{bcolors.ENDC}"
         tmpgp3: list[float] = []
         tmpwb97xd4: list[float] = []
         tmpindex: list[int] = []
+        indices: list[int] = []
 
         moldir = os.getcwd()
 
         # go through the conformers and read the energies for gfn2, gp3, and TZ
+        continuewithmol = False
         for j in conformer:
             chdir(str(j))
             # check if the calculation directories exist
@@ -99,22 +101,22 @@ in {i} is {len(conformer)}{bcolors.ENDC}"
                     f"{bcolors.FAIL}Error: Directory structure is not correct. \
 Directory 'gfn2' not found in {j}.{bcolors.ENDC}"
                 )
-                chdir(pwd)
-                raise SystemExit(1)
+                continuewithmol = True
+                break
             if not os.path.exists("gp3"):
                 print(
                     f"{bcolors.FAIL}Error: Directory structure is not correct. \
 Directory 'gp3' not found in {j}.{bcolors.ENDC}"
                 )
-                chdir(pwd)
-                raise SystemExit(1)
+                continuewithmol = True
+                break
             if not os.path.exists("TZ"):
                 print(
                     f"{bcolors.FAIL}Error: Directory structure is not correct. \
 Directory 'TZ' not found in {j}.{bcolors.ENDC}"
                 )
-                chdir(pwd)
-                raise SystemExit(1)
+                continuewithmol = True
+                break
             # read the energies from the output files
             tmpgfn2.append(read_energy_file("gfn2/energy"))
             tmpgp3.append(read_energy_file("gp3/energy"))
@@ -122,6 +124,10 @@ Directory 'TZ' not found in {j}.{bcolors.ENDC}"
             tmpindex.append(j)
 
             chdir(moldir)
+
+        if continuewithmol:
+            chdir(pwd)
+            continue
 
         # check if energy values in the reference are closer to each other than
         # the minimum difference. For that, go through all combinations of energies
@@ -240,8 +246,43 @@ for the energy ranking in each selected conformer ensemble:{bcolors.ENDC}"
     )
     for i in confe.keys():
         # 2nd: calculate the Spearman rank correlation coefficient
-        spearmanrcc["GFN2"].append(spearmanr(confe[i]["wB97X-D4"], confe[i]["GFN2"])[0])
-        spearmanrcc["GP3"].append(spearmanr(confe[i]["wB97X-D4"], confe[i]["GP3"])[0])
+
+        gfn2scc = 0.0
+        gp3scc = 0.0
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("error")
+                gfn2scc = spearmanr(confe[i]["wB97X-D4"], confe[i]["GFN2"])[0]
+        except ValueError as e:
+            print(f"{bcolors.FAIL}Error: {e}{bcolors.ENDC}")
+            print(
+                f"{bcolors.FAIL}Error in molecule {i}: \
+Spearman rank correlation coefficient could not be calculated.{bcolors.ENDC}"
+            )
+            raise SystemExit(1) from e
+        except RuntimeWarning as e:
+            print(f"{bcolors.WARNING}ERROR in {i}: {e}\nSkipping...{bcolors.ENDC}")
+            continue
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("error")
+                gp3scc = spearmanr(confe[i]["wB97X-D4"], confe[i]["GP3"])[0]
+        except ValueError as e:
+            print(f"{bcolors.FAIL}Error: {e}{bcolors.ENDC}")
+            print(
+                f"{bcolors.FAIL}Error in molecule {i}: \
+Spearman rank correlation coefficient could not be calculated.{bcolors.ENDC}"
+            )
+            raise SystemExit(1) from e
+        except RuntimeWarning as e:
+            print(f"{bcolors.WARNING}ERROR in {i}: {e}\nSkipping...{bcolors.ENDC}")
+            continue
+
+        if np.isnan(gfn2scc) or np.isnan(gp3scc):
+            print("Skipping...")
+            continue
+        spearmanrcc["GFN2"].append(gfn2scc)
+        spearmanrcc["GP3"].append(gp3scc)
         print(
             3 * " "
             + f"{i:8d}: {spearmanrcc['GFN2'][-1]:6.3f} {spearmanrcc['GP3'][-1]:6.3f}"
