@@ -83,6 +83,15 @@ Number of conformers ({len(conformer)}) in {i} is zero. Skipping...{bcolors.ENDC
 in {i} is {len(conformer)}{bcolors.ENDC}"
             )
 
+        # check for charge constraints
+        if conformer_prop["charge"] != 0:
+            print(
+                f"{bcolors.WARNING}Warning: \
+Charge of molecule {i} is not zero. Skipping...{bcolors.ENDC}"
+            )
+            chdir(pwd)
+            continue
+
         tmpgfn2: list[float] = []
         tmpgp3: list[float] = []
         tmpwb97xd4: list[float] = []
@@ -129,16 +138,34 @@ Directory 'TZ' not found in {j}.{bcolors.ENDC}"
             chdir(pwd)
             continue
 
+        # sort the energies in ascending order with the TZ/wB97X-D4 energies as reference
+        # the GFN2 and GP3 energies should be sorted with the same indices as the TZ energies.
+
+        energies[i] = {}
+        energies[i]["GFN2"] = []
+        energies[i]["GP3"] = []
+        energies[i]["wB97X-D4"] = []
+        energies[i]["conformer_index"] = []
+        energies[i]["conformer_lowest"] = []
+
+        indices = sorted(range(len(tmpwb97xd4)), key=lambda k: tmpwb97xd4[k])
+        tmpwb97xd4 = [tmpwb97xd4[k] for k in indices]
+        tmpgfn2 = [tmpgfn2[k] for k in indices]
+        tmpgp3 = [tmpgp3[k] for k in indices]
+        tmpindex = [tmpindex[k] for k in indices]
+
         # check if energy values in the reference are closer to each other than
         # the minimum difference. For that, go through all combinations of energies
         # and check if the difference is smaller than the minimum difference.
 
+        conformer_deleted = (
+            False  # Initialize a flag tracking whether a conformer was deleted
+        )
         if len(tmpwb97xd4) > 2:
             while True:
-                conformer_deleted = (
-                    False  # Initialize a flag tracking whether a conformer was deleted
-                )
                 for k in range(1, len(tmpwb97xd4)):
+                    conformer_deleted = False  # Initialize a flag tracking
+                    # whether a conformer was deleted
                     if len(tmpwb97xd4) <= 3:
                         break
                     if (
@@ -161,29 +188,13 @@ Directory 'TZ' not found in {j}.{bcolors.ENDC}"
                         conformer_deleted = True  # Set the flag to True
                         print(
                             f"{bcolors.WARNING}Warning: \
-a conformer was deleted in {i} due to too close-lying energies.{bcolors.ENDC}"
+conformer {k} was deleted in {i} due to too close-lying energies.{bcolors.ENDC}"
                         )
                         break  # Break out of the for loop
                 if not conformer_deleted:
                     # If no conformers were deleted in the current iteration,
                     # break out of the while loop
                     break
-
-        # sort the energies in ascending order with the TZ/wB97X-D4 energies as reference
-        # the GFN2 and GP3 energies should be sorted with the same indices as the TZ energies.
-
-        energies[i] = {}
-        energies[i]["GFN2"] = []
-        energies[i]["GP3"] = []
-        energies[i]["wB97X-D4"] = []
-        energies[i]["conformer_index"] = []
-        energies[i]["conformer_lowest"] = []
-
-        indices = sorted(range(len(tmpwb97xd4)), key=lambda k: tmpwb97xd4[k])
-        tmpwb97xd4 = [tmpwb97xd4[k] for k in indices]
-        tmpgfn2 = [tmpgfn2[k] for k in indices]
-        tmpgp3 = [tmpgp3[k] for k in indices]
-        tmpindex = [tmpindex[k] for k in indices]
 
         ### DEV OUTPUT ###
         # print the tmp arrays next to each other for comparison
@@ -312,9 +323,9 @@ StdDev of the Spearman rank correlation coefficient:{bcolors.ENDC}"
     better_scc["equal"] = 0
     for i in range(len(spearmanrcc["GFN2"])):
         if spearmanrcc["GFN2"][i] > spearmanrcc["GP3"][i]:
-            better_scc["GP3"] += 1
-        elif spearmanrcc["GFN2"][i] < spearmanrcc["GP3"][i]:
             better_scc["GFN2"] += 1
+        elif spearmanrcc["GFN2"][i] < spearmanrcc["GP3"][i]:
+            better_scc["GP3"] += 1
         else:
             better_scc["equal"] += 1
     print(
