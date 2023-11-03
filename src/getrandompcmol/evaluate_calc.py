@@ -535,7 +535,7 @@ Directory {mol}/{energy_db[mol]['conformer_lowest'][0]}/TZ/{file} not found."
 res_archive/{prefix}_{mol}_1.{bcolors.ENDC}"
             )
             struclocationfirst = str(f"{prefix}_{mol}_1/")
-            dirpathfirst = str(f"res_archive/") + struclocationfirst
+            dirpathfirst = "res_archive/" + struclocationfirst
             dirpathin = dirpathfirst + "coord"
             dirpathout = dirpathfirst + "struc.xyz"
             try:
@@ -587,7 +587,7 @@ Directory {mol}/{conf}/TZ/{file} not found."
                 f"res_archive/{prefix}_{mol}_{k}/coord",
             )
             struclocation = str(f"{prefix}_{mol}_{k}/")
-            dirpath = str(f"res_archive/") + struclocation
+            dirpath = "res_archive/" + struclocation
             dirpathin = dirpath + "coord"
             dirpathout = dirpath + "struc.xyz"
             try:
@@ -620,7 +620,8 @@ Directory {mol}/{conf}/TZ/{file} not found."
                     f"$tmer {struclocationfirst:>25s}$f {struclocation:>25s}$f"
                     + "   x    -1  1   $w"
                     + f"{energy_db[mol]['wB97X-D4'][k-2]:10.6f}"
-                    # 'k-2' because the first conformer is the lowest one and the array starts at 0 instead of 1
+                    # 'k-2' because the first conformer is
+                    # the lowest one and the array starts at 0 instead of 1
                 )
                 print(resline, file=f)
 
