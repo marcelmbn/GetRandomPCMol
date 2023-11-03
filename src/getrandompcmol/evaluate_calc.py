@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess as sp
 import warnings
 
 import numpy as np
 from scipy.stats import spearmanr
 
-from .miscelleanous import bcolors, chdir
+from .miscelleanous import bcolors, chdir, create_directory
 
 # define a general parameter for the evaluation of the conformer ensemble
 HARTREE2KCAL = 627.5094740631  # Hartree
@@ -410,6 +412,196 @@ the RMSD is better:{bcolors.ENDC}"
         f"{bcolors.BOLD}Total number of molecules: \
 {nmolecules}{bcolors.ENDC}"
     )
+
+
+def create_res_dir(
+    energy_db: dict[int, dict[str, list[int | float]]], wipe: bool
+) -> None:
+    """
+    Creates the result directory if it does not exist already.
+    """
+
+    prefix = "RNDCONF"
+
+    tzfilestocopy = ["energy", "control", "coord", "ridft.out", "gradient", "basis"]
+
+    resfile = "res.sh"
+
+    # check the file system for the existence of the first entry of the energy_db
+    # if it exists, the directory structure is assumed to be correct
+    # 1: get the first entry of the energy_db
+    tmpkey = list(energy_db.keys())[0]
+    if not os.path.exists(f"{tmpkey}"):
+        print(
+            f"{bcolors.FAIL}Error: Directory structure is not correct. \
+Directory {tmpkey} not found.{bcolors.ENDC}"
+        )
+        raise SystemExit(1)
+
+    exist = create_directory("res_archive")
+    if exist and not wipe:
+        print(
+            f"{bcolors.FAIL}Error: Directory 'res_archive' already exists. \
+Stopping here.{bcolors.ENDC}"
+        )
+        raise SystemExit(1)
+    elif exist and wipe:
+        print(
+            f"{bcolors.WARNING}Warning: Directory 'res_archive' already exists. \
+Wiping it...{bcolors.ENDC}"
+        )
+        # remove the directory and create it again
+        shutil.rmtree("res_archive")
+        create_directory("res_archive")
+
+    # write the header of the .res file to a file called .res
+    with open(f"res_archive/{resfile}", "w", encoding="UTF-8") as f:
+        print("#!/bin/bash\n", file=f)
+        print("# MM 11/23", file=f)
+        print(
+            "# wB97X-D4/def2-TZVPPD // wB97X-3c at CREST(GFN2-xTB) conformers\n", file=f
+        )
+        print('if [ "$TMER" == "" ]', file=f)
+        print("then", file=f)
+        print("   tmer=tmer2++", file=f)
+        print("else", file=f)
+        print("   tmer=$TMER", file=f)
+        print("fi", file=f)
+        print("f=$1", file=f)
+        print("if [ -z $2 ]", file=f)
+        print("then", file=f)
+        print("   w=0", file=f)
+        print("else", file=f)
+        print("   w=$2", file=f)
+        print("fi", file=f)
+
+    # iteratate over all conformer ensembles in the energy_db
+    for mol in energy_db.keys():
+        # check if it is a charged species
+        if energy_db[mol]["charge"] != 0:
+            print(
+                f"{bcolors.WARNING}Warning: \
+Charge of molecule {mol} is not zero.{bcolors.ENDC}"
+            )
+            tzfilestocopy.append(".CHRG")
+
+        # create a directory for each conformer
+        if not len(energy_db[mol]["conformer_lowest"]) == 1:
+            raise ValueError(f"Error: More than one lowest conformer in {mol}.")
+        else:
+            create_directory(f"res_archive/{prefix}_{str(mol)}_1")
+            create_directory(f"res_archive/{prefix}_{str(mol)}_1/TZ")
+            for file in tzfilestocopy:
+                if not os.path.exists(
+                    f"{mol}/{energy_db[mol]['conformer_lowest'][0]}/TZ/{file}"
+                ):
+                    raise FileNotFoundError(
+                        f"Error: \
+Directory {mol}/{energy_db[mol]['conformer_lowest'][0]}/TZ/{file} not found."
+                    )
+                else:
+                    shutil.copy2(
+                        f"{mol}/{energy_db[mol]['conformer_lowest'][0]}/TZ/{file}",
+                        f"res_archive/{prefix}_{mol}_1/TZ/{file}",
+                    )
+            # copy 'coord' also to main directory of conformer
+            shutil.copy2(
+                f"{mol}/{energy_db[mol]['conformer_lowest'][0]}/TZ/coord",
+                f"res_archive/{prefix}_{mol}_1/coord",
+            )
+            print(
+                f"{bcolors.OKGREEN}Copied files for molecule {mol} to \
+res_archive/{prefix}_{mol}_1.{bcolors.ENDC}"
+            )
+            struclocationfirst = str(f"{prefix}_{mol}_1/")
+            dirpathfirst = str(f"res_archive/") + struclocationfirst
+            dirpathin = dirpathfirst + "coord"
+            dirpathout = dirpathfirst + "struc.xyz"
+            try:
+                pgout = sp.run(
+                    [
+                        "mctc-convert",
+                        dirpathin,
+                        dirpathout,
+                        "--normalize",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    timeout=120,
+                )
+            except sp.TimeoutExpired as exc:
+                error = " " * 3 + f"Process timed out.\n{exc}"
+                print(error)
+                raise SystemExit(1) from exc
+            except sp.CalledProcessError as exc:
+                print(" " * 3 + "Status : FAIL", exc.returncode, exc.output)
+                # write the error output to a file
+                with open("mctc-convert_error.err", "w", encoding="UTF-8") as f:
+                    f.write(exc.stderr.decode("utf-8"))
+                error = f"{bcolors.WARNING}mctc-convert failed.{bcolors.ENDC}"
+                print(error)
+                raise SystemExit(1) from exc
+            with open(f"res_archive/{resfile}", "a", encoding="UTF-8") as f:
+                print(f"\n# CID: {mol}", file=f)
+        k = 1
+        for conf in energy_db[mol]["conformer_index"]:
+            k += 1
+            # create a directory for each molecule
+            create_directory(f"res_archive/{prefix}_{mol}_{k}")
+            create_directory(f"res_archive/{prefix}_{mol}_{k}/TZ")
+            for file in tzfilestocopy:
+                if not os.path.exists(f"{mol}/{conf}/TZ/{file}"):
+                    raise FileNotFoundError(
+                        f"Error: \
+Directory {mol}/{conf}/TZ/{file} not found."
+                    )
+                else:
+                    shutil.copy2(
+                        f"{mol}/{conf}/TZ/{file}",
+                        f"res_archive/{prefix}_{mol}_{k}/TZ/{file}",
+                    )
+            # copy 'coord' also to main directory of conformer
+            shutil.copy2(
+                f"{mol}/{conf}/TZ/coord",
+                f"res_archive/{prefix}_{mol}_{k}/coord",
+            )
+            struclocation = str(f"{prefix}_{mol}_{k}/")
+            dirpath = str(f"res_archive/") + struclocation
+            dirpathin = dirpath + "coord"
+            dirpathout = dirpath + "struc.xyz"
+            try:
+                pgout = sp.run(
+                    [
+                        "mctc-convert",
+                        dirpathin,
+                        dirpathout,
+                        "--normalize",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    timeout=120,
+                )
+            except sp.TimeoutExpired as exc:
+                error = " " * 3 + f"Process timed out.\n{exc}"
+                print(error)
+                raise SystemExit(1) from exc
+            except sp.CalledProcessError as exc:
+                print(" " * 3 + "Status : FAIL", exc.returncode, exc.output)
+                # write the error output to a file
+                with open("mctc-convert_error.err", "w", encoding="UTF-8") as f:
+                    f.write(exc.stderr.decode("utf-8"))
+                error = f"{bcolors.WARNING}mctc-convert failed.{bcolors.ENDC}"
+                print(error)
+                raise SystemExit(1) from exc
+
+            with open(f"res_archive/{resfile}", "a", encoding="UTF-8") as f:
+                resline = (
+                    f"$tmer {struclocationfirst:>25s}$f {struclocation:>25s}$f"
+                    + "   x    -1  1   $w"
+                    + f"{energy_db[mol]['wB97X-D4'][k-2]:10.6f}"
+                    # 'k-2' because the first conformer is the lowest one and the array starts at 0 instead of 1
+                )
+                print(resline, file=f)
 
 
 def read_energy_file(file: str) -> float:

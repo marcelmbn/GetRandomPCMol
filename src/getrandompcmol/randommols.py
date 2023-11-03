@@ -14,7 +14,7 @@ from multiprocessing import Pool
 
 from numpy.random import RandomState
 
-from .evaluate_calc import eval_calc_ensemble, get_calc_ensemble
+from .evaluate_calc import create_res_dir, eval_calc_ensemble, get_calc_ensemble
 from .evaluate_conf import eval_conf_ensemble
 from .miscelleanous import bcolors, chdir, checkifinpath, create_directory
 from .qmcalc import crest_sampling, xtbopt
@@ -286,6 +286,9 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
 
 
 def console_entry_point() -> int:
+    """
+    Entry point for the console script.
+    """
     # parse arguments
     parser = ap.ArgumentParser(description="Generate random molecules from PubChem")
     parser.add_argument(
@@ -358,10 +361,13 @@ Provide the lower and upper limit for the number of conformers.",
     )
     parser.add_argument(
         "--evalcalconly",
-        action="store_true",
-        help="Only evaluate the QM calculations.",
+        help="Only evaluate the QM calculations. \
+This option is only useful if you have already generated the conformer ensemble. \
+Give 'wipe' as the second argument to delete the conformer directories.",
         required=False,
         default=False,
+        nargs=1,
+        type=str,
     )
 
     args = parser.parse_args()
@@ -420,6 +426,10 @@ and no compound directories provided.{bcolors.ENDC}"
     if args.evalcalconly:
         calcenergies = get_calc_ensemble()
         eval_calc_ensemble(calcenergies)
+        wipe = False
+        if args.evalcalconly[0] == "wipe":
+            wipe = True
+        create_res_dir(calcenergies, wipe)
         return 0
 
     main(args)
