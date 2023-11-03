@@ -158,4 +158,16 @@ in directory {i}/crest.{bcolors.ENDC}"
     # write the compounds with eligible conformer ensembles to a file
     with open("compounds.conformers.txt", "w", encoding="UTF-8") as f:
         for confdict in conf_props:
-            f.write(f"{confdict['name']}\n")
+            # search for this entry in the list of compounds and
+            # write the name of the compound to the file
+            trivialname = ""
+            with open("compounds.txt", encoding="UTF-8") as g:
+                lines = g.readlines()
+                for line in lines:
+                    if str(confdict["name"]) in line:
+                        try:
+                            trivialname = line.split()[1]
+                        except IndexError:
+                            trivialname = ""
+
+            f.write(f"{confdict['name']} {trivialname}\n")

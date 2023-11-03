@@ -20,7 +20,7 @@ HARTREE2KCAL = 627.5094740631  # Hartree
 MINDIFF = 0.01  # kcal/mol
 
 
-def get_calc_ensemble() -> dict[int, dict[str, list[int | float]]]:
+def get_calc_ensemble() -> dict[int, dict[str, list[str | int | float]]]:
     """
     Evaluates a given conformer ensemble.
 
@@ -34,18 +34,38 @@ def get_calc_ensemble() -> dict[int, dict[str, list[int | float]]]:
 File 'compounds.conformers.txt' not found.{bcolors.ENDC}"
         )
         raise SystemExit(1)
+    mols: dict[int, str] = {}
     try:
         with open("compounds.conformers.txt", encoding="UTF-8") as f:
             lines = f.readlines()
-            mols = [int(i.strip()) for i in lines]
+            for i in lines:
+                mols[int(i.split()[0])] = str(i.split()[1])
     except FileNotFoundError as e:
         print(f"{bcolors.FAIL}Error: {e}{bcolors.ENDC}")
         print(f"{bcolors.FAIL}File 'compounds.conformers.txt' not found.{bcolors.ENDC}")
         raise SystemExit(1) from e
+    # catch index error and start again with not reading the name of the molecule in the
+    # second column
+    except IndexError:
+        print(
+            f"{bcolors.FAIL}File 'compounds.conformers.txt' does not have \
+the correct format. Trying again with not reading the names...{bcolors.ENDC}"
+        )
+        try:
+            with open("compounds.conformers.txt", encoding="UTF-8") as f:
+                lines = f.readlines()
+                for i in lines:
+                    mols[int(i.split()[0])] = ""
+        except IndexError as eindex2:
+            print(
+                f"{bcolors.FAIL}File 'compounds.conformers.txt' does not have \
+the correct format. Stopping here.{bcolors.ENDC}"
+            )
+            raise SystemExit(1) from eindex2
 
-    energies: dict[int, dict[str, list[int | float]]] = {}
-    for i in mols:
-        chdir(str(i))
+    energies: dict[int, dict[str, list[str | int | float]]] = {}
+    for cid, name in mols.items():
+        chdir(str(cid))
         try:
             with open("index.conformers", encoding="UTF-8") as f:
                 lines = f.readlines()
@@ -54,7 +74,7 @@ File 'compounds.conformers.txt' not found.{bcolors.ENDC}"
             print(f"{bcolors.FAIL}Error: {e}{bcolors.ENDC}")
             print(
                 f"{bcolors.FAIL}File 'index.conformers' not found \
-in directory {i}.{bcolors.ENDC}"
+in directory {cid}.{bcolors.ENDC}"
             )
             chdir(pwd)
             raise SystemExit(1) from e
@@ -67,7 +87,7 @@ in directory {i}.{bcolors.ENDC}"
             print(f"{bcolors.FAIL}Error: {e}{bcolors.ENDC}")
             print(
                 f"{bcolors.FAIL}File 'conformer.json' not found \
-in directory {i}.{bcolors.ENDC}"
+in directory {cid}.{bcolors.ENDC}"
             )
             chdir(pwd)
             raise SystemExit(1) from e
@@ -75,21 +95,21 @@ in directory {i}.{bcolors.ENDC}"
         if len(conformer) == 0:
             print(
                 f"{bcolors.WARNING}Warning: \
-Number of conformers ({len(conformer)}) in {i} is zero. Skipping...{bcolors.ENDC}"
+Number of conformers ({len(conformer)}) in {cid} is zero. Skipping...{bcolors.ENDC}"
             )
             chdir(pwd)
             continue
         else:
             print(
                 f"{bcolors.OKGREEN}Number of effective conformers \
-in {i} is {len(conformer)}{bcolors.ENDC}"
+in {cid} is {len(conformer)}{bcolors.ENDC}"
             )
 
         # check for charge constraints
         if conformer_prop["charge"] != 0:
             print(
                 f"{bcolors.WARNING}Warning: \
-Charge of molecule {i} is not zero. Skipping...{bcolors.ENDC}"
+Charge of molecule {cid} is not zero. Skipping...{bcolors.ENDC}"
             )
             chdir(pwd)
             continue
@@ -143,12 +163,12 @@ Directory 'TZ' not found in {j}.{bcolors.ENDC}"
         # sort the energies in ascending order with the TZ/wB97X-D4 energies as reference
         # the GFN2 and GP3 energies should be sorted with the same indices as the TZ energies.
 
-        energies[i] = {}
-        energies[i]["GFN2"] = []
-        energies[i]["GP3"] = []
-        energies[i]["wB97X-D4"] = []
-        energies[i]["conformer_index"] = []
-        energies[i]["conformer_lowest"] = []
+        energies[cid] = {}
+        energies[cid]["GFN2"] = []
+        energies[cid]["GP3"] = []
+        energies[cid]["wB97X-D4"] = []
+        energies[cid]["conformer_index"] = []
+        energies[cid]["conformer_lowest"] = []
 
         indices = sorted(range(len(tmpwb97xd4)), key=lambda k: tmpwb97xd4[k])
         tmpwb97xd4 = [tmpwb97xd4[k] for k in indices]
@@ -190,7 +210,7 @@ Directory 'TZ' not found in {j}.{bcolors.ENDC}"
                         conformer_deleted = True  # Set the flag to True
                         print(
                             f"{bcolors.WARNING}Warning: \
-conformer {k} was deleted in {i} due to too close-lying energies.{bcolors.ENDC}"
+conformer {k} was deleted in {cid} due to too close-lying energies.{bcolors.ENDC}"
                         )
                         break  # Break out of the for loop
                 if not conformer_deleted:
@@ -208,19 +228,20 @@ conformer {k} was deleted in {i} due to too close-lying energies.{bcolors.ENDC}"
 
         for j in range(len(conformer)):
             if j == 0:
-                energies[i]["conformer_lowest"].append(tmpindex[j])
+                energies[cid]["conformer_lowest"].append(tmpindex[j])
             else:
-                energies[i]["wB97X-D4"].append(
+                energies[cid]["wB97X-D4"].append(
                     (tmpwb97xd4[j] - tmpwb97xd4[0]) * HARTREE2KCAL
                 )
-                energies[i]["GFN2"].append((tmpgfn2[j] - tmpgfn2[0]) * HARTREE2KCAL)
-                energies[i]["GP3"].append((tmpgp3[j] - tmpgp3[0]) * HARTREE2KCAL)
-                energies[i]["conformer_index"].append(tmpindex[j])
+                energies[cid]["GFN2"].append((tmpgfn2[j] - tmpgfn2[0]) * HARTREE2KCAL)
+                energies[cid]["GP3"].append((tmpgp3[j] - tmpgp3[0]) * HARTREE2KCAL)
+                energies[cid]["conformer_index"].append(tmpindex[j])
 
         # add the conformer_prop infos to the energies dict
-        energies[i]["natoms"] = conformer_prop["natoms"]
-        energies[i]["charge"] = conformer_prop["charge"]
-        energies[i]["nconf"] = conformer_prop["nconf"]
+        energies[cid]["natoms"] = conformer_prop["natoms"]
+        energies[cid]["charge"] = conformer_prop["charge"]
+        energies[cid]["nconf"] = conformer_prop["nconf"]
+        energies[cid]["name"] = [name]
 
         chdir(pwd)
 
@@ -230,7 +251,7 @@ conformer {k} was deleted in {i} due to too close-lying energies.{bcolors.ENDC}"
     return energies
 
 
-def eval_calc_ensemble(confe: dict[int, dict[str, list[int | float]]]) -> None:
+def eval_calc_ensemble(confe: dict[int, dict[str, list[str | int | float]]]) -> None:
     """
     Evaluates a given conformer ensemble in dictionary format.
     """
@@ -415,7 +436,7 @@ the RMSD is better:{bcolors.ENDC}"
 
 
 def create_res_dir(
-    energy_db: dict[int, dict[str, list[int | float]]], wipe: bool
+    energy_db: dict[int, dict[str, list[str | int | float]]], wipe: bool
 ) -> None:
     """
     Creates the result directory if it does not exist already.

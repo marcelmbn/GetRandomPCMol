@@ -17,7 +17,7 @@ from numpy.random import RandomState
 from .evaluate_calc import create_res_dir, eval_calc_ensemble, get_calc_ensemble
 from .evaluate_conf import eval_conf_ensemble
 from .miscelleanous import bcolors, chdir, checkifinpath, create_directory
-from .qmcalc import crest_sampling, xtbopt
+from .qmcalc import crest_protonate, crest_sampling, xtbopt
 
 
 def main(arguments: ap.Namespace) -> None:
@@ -31,7 +31,7 @@ def main(arguments: ap.Namespace) -> None:
     # set the seed
     print(f"Generating random numbers between 1 and {arguments.maxcid:d} ...")
     seed = RandomState(arguments.seed)
-    values = seed.randint(1, arguments.maxcid, size=100 * numcomp)
+    values = seed.choice(range(1, arguments.maxcid), size=100 * numcomp, replace=False)
     print("Done.")
 
     pwd = os.getcwd()
@@ -40,7 +40,7 @@ def main(arguments: ap.Namespace) -> None:
     # run PubGrep for each value and set up a list with successful downloads
     comp: list[int] = []
     molname: list[str] = []
-    #### Hard-code the CIDs for testing ####
+    #### Hard-code some CIDs for testing ####
     # values = []
     # values.append(792349)
     # values.append(47090)
@@ -220,6 +220,25 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
     print(f"{bcolors.HEADER}### CREST CONFORMER SEARCH ###{bcolors.ENDC}")
 
     if arguments.crest:
+        # select between CREST run modes
+        if arguments.crest == "protonate":
+            # determine the number of cores for protonation
+            totalcores = os.cpu_count()
+            if totalcores is None:
+                n_threads = 4
+            else:
+                n_threads = int(totalcores)
+            crest_protonate_options: dict[str, int | float | str] = {
+                "nthreads": n_threads,
+                "mddump": 250,
+                "mdlen": "x0.75",
+            }
+
+            for i in comp:
+                # run CREST protonation
+                print(f"Running CREST protonation for CID {i} ...")
+                error = crest_protonate(pwd, str(i), crest_protonate_options)
+
         # get number of cores
         totalcores = os.cpu_count()
         if totalcores is None:
@@ -234,6 +253,14 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
             "mddump": 250,
             "mdlen": "x0.75",
         }
+        if arguments.crest == "protonate":
+            crest_options["strucfile"] = "opt_proto.xyz"
+        elif arguments.crest == "normal":
+            crest_options["strucfile"] = "opt.xyz"
+        else:
+            raise ValueError(
+                f"{bcolors.FAIL}Unknown CREST run mode: {arguments.crest}{bcolors.ENDC}"
+            )
         sum_cores = num_cores * n_threads
         print(f"Number of detected cores on this machine: {totalcores}")
         print(3 * " " + f"Number of cores per process: {n_threads}")
@@ -334,9 +361,12 @@ def console_entry_point() -> int:
     )
     parser.add_argument(
         "--crest",
-        action="store_true",
-        help="Conformer sampling with CREST",
+        help="Conformer sampling with CREST. \
+Provide a keyword for a run mode: 'normal', 'protonate'. \
+The default is 'normal'.",
         required=False,
+        type=str,
+        choices=["normal", "protonate"],
         default=False,
     )
     parser.add_argument(

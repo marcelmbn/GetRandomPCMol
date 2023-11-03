@@ -87,7 +87,7 @@ def crest_sampling(
     pgout = None
     chdir(name)
     direxist = create_directory("crest")
-    shutil.copy2("opt.xyz", "crest/")
+    shutil.copy2(str(crestsettings["strucfile"]), "crest/")
     # if exist, copy the .CHRG file to the crest directory
     if os.path.exists(".CHRG"):
         shutil.copy2(".CHRG", "crest/")
@@ -104,7 +104,7 @@ def crest_sampling(
     else:
         conformer_prop["charge"] = 0
     # obtain number of atoms from opt.xyz
-    with open("opt.xyz", encoding="UTF-8") as f:
+    with open(str(crestsettings["strucfile"]), encoding="UTF-8") as f:
         lines = f.readlines()
         conformer_prop["natoms"] = int(lines[0].strip())
     conformer_prop["energies"] = []
@@ -115,7 +115,7 @@ def crest_sampling(
         pgout = subprocess.run(
             [
                 "crest",
-                "opt.xyz",
+                str(crestsettings["strucfile"]),
                 "--squick",
                 "--T",
                 str(crestsettings["nthreads"]),
@@ -177,3 +177,78 @@ skipping CID {name}.{bcolors.ENDC}"
     chdir(homedir)
 
     return conformer_prop
+
+
+def crest_protonate(
+    homedir: str, name: str, crestsettings: dict[str, int | float | str]
+) -> str:
+    """
+    Function to run CREST sampling.
+    """
+    error = ""
+    pgout = None
+    chdir(name)
+    crest_dir = "protonation"
+    direxist = create_directory(crest_dir)
+    shutil.copy2("opt.xyz", f"{crest_dir}/")
+    # if exist, copy the .CHRG file to the crest directory
+    init_charge = 0
+    if os.path.exists(".CHRG"):
+        shutil.copy2(".CHRG", f"{crest_dir}/")
+        with open(".CHRG", encoding="UTF-8") as f:
+            lines = f.readlines()
+            init_charge = int(lines[0].strip())
+    # obtain number of atoms from opt.xyz
+    nat = 0
+    with open("opt.xyz", encoding="UTF-8") as f:
+        lines = f.readlines()
+        nat = int(lines[0].strip())
+
+    chdir(crest_dir)
+
+    error = ""
+    try:
+        pgout = subprocess.run(
+            [
+                "crest",
+                "opt.xyz",
+                "--protonate",
+                "--T",
+                str(crestsettings["nthreads"]),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        with open("crest.out", "w", encoding="UTF-8") as f:
+            f.write(pgout.stdout.decode("utf-8"))
+        with open("crest.err", "w", encoding="UTF-8") as f:
+            f.write(pgout.stderr.decode("utf-8"))
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"{bcolors.FAIL}Status : FAIL for {name} with code {exc.returncode}{bcolors.ENDC}, ",
+            end="",
+            flush=True,
+        )
+        with open("crest_error.out", "w", encoding="UTF-8") as f:
+            f.write(exc.output.decode("utf-8"))
+        chdir(homedir)
+        error = f"CREST conformer search failed - skipping CID {name}."
+        return error
+
+    # read first nat+2 lines from protonated.xyz and write it to opt_proto.xyz
+    with open("protonated.xyz", encoding="UTF-8") as f:
+        lines = f.readlines()
+        with open("opt_proto.xyz", "w", encoding="UTF-8") as g:
+            print(f"{nat+1}\n", file=g)
+            for i in range(2, nat + 3):
+                g.write(lines[i])
+
+    # write new .CHRG file with initial charge + 1
+    with open(".CHRG", "w", encoding="UTF-8") as g:
+        g.write(str(init_charge + 1) + "\n")
+    shutil.copy2("opt_proto.xyz", f"{homedir}/{name}/")
+    shutil.copy2(".CHRG", f"{homedir}/{name}/")
+    print(f"{name}, ", end="", flush=True)
+    chdir(homedir)
+
+    return error
