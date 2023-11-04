@@ -9,7 +9,6 @@ import argparse as ap
 import json
 import os
 import shutil
-import subprocess
 from multiprocessing import Pool
 
 from numpy.random import RandomState
@@ -17,7 +16,7 @@ from numpy.random import RandomState
 from .evaluate_calc import create_res_dir, eval_calc_ensemble, get_calc_ensemble
 from .evaluate_conf import eval_conf_ensemble
 from .miscelleanous import bcolors, chdir, checkifinpath, create_directory
-from .qmcalc import crest_protonate, crest_sampling, xtb_sp, xtbopt
+from .qmcalc import crest_protonate, crest_sampling, get_sdf, xtb_opt, xtb_sp
 
 
 def main(arguments: ap.Namespace) -> None:
@@ -68,62 +67,11 @@ skipping CID {i}.{bcolors.ENDC}"
                     shutil.rmtree(f"{i}")
                     continue
         else:
+            # > Run PubGrep...
             print(f"\nDownloading CID {i:7d} ...")
-            try:
-                pgout = subprocess.run(
-                    ["PubGrep", "--input", "cid", str(i), "--output", "sdf"],
-                    check=True,
-                    capture_output=True,
-                    timeout=30,
-                )
-            except subprocess.TimeoutExpired as exc:
-                print(f"Process timed out.\n{exc}")
-                if os.path.exists(f"{i}.sdf"):
-                    os.remove(f"{i}.sdf")
+            pg_error = get_sdf(str(i))
+            if pg_error != "":
                 continue
-            except subprocess.CalledProcessError as exc:
-                print("Status : FAIL", exc.returncode, exc.output)
-                if os.path.exists(f"{i}.sdf"):
-                    os.remove(f"{i}.sdf")
-                continue
-
-            # print the return code
-            if pgout.returncode != 0:
-                print("Return code:", pgout.returncode)
-
-            if (pgout.stderr.decode("utf-8") == "") or (
-                "normal termination" in pgout.stderr.decode("utf-8")
-            ):
-                print(" " * 3 + f"Downloaded {i} successfully.")
-            else:
-                if "abnormal termination" in pgout.stderr.decode("utf-8"):
-                    print(
-                        " " * 3
-                        + f"""{bcolors.WARNING}xTB error in conversion process - \
-skipping CID {i}.{bcolors.ENDC}"""
-                    )
-                    if os.path.exists(f"{i}.sdf"):
-                        os.remove(f"{i}.sdf")
-                    continue
-                elif not "normal termination" in pgout.stderr.decode("utf-8"):
-                    print(
-                        " " * 3
-                        + f"{bcolors.WARNING}Unknown PubGrep/xTB conversion error - \
-skipping CID {i}.{bcolors.ENDC}"
-                    )
-                    errmess = "PubGrep_error" + str(i) + ".err"
-                    with open(errmess, "w", encoding="UTF-8") as f:
-                        f.write(pgout.stderr.decode("utf-8"))
-                    if os.path.exists(f"{i}.sdf"):
-                        os.remove(f"{i}.sdf")
-                    continue
-                else:
-                    print(" " * 3 + f"Unknown PubGrep error for {i:7d}.")
-                    if os.path.exists(f"{i}.sdf"):
-                        os.remove(f"{i}.sdf")
-                    continue
-
-            # print the first entry of the fourth line compund of interest in sdf format
             try:
                 with open(f"{pwd}/{i}.sdf", encoding="UTF-8") as f:
                     lines = f.readlines()
@@ -155,7 +103,7 @@ skipping CID {i}.{bcolors.ENDC}"
             # copy the sdf file to the new directory
             # run xTB optimization
             print(" " * 3 + f"Running xTB optimization for CID {i} ...")
-            error = xtbopt(str(i))
+            error = xtb_opt(str(i))
             chdir(pwd)
             if error != "":
                 if os.path.exists(f"{i}.sdf"):

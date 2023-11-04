@@ -12,6 +12,12 @@ from .miscelleanous import bcolors, chdir, create_directory
 
 
 def xtb_sp(name: str) -> str:
+    """
+    Function to run xTB single point calculation.
+
+    Arguments:
+    name: CID of the molecule to be optimized
+    """
     error = ""
     pgout = None
     try:
@@ -39,7 +45,7 @@ def xtb_sp(name: str) -> str:
     return error
 
 
-def xtbopt(name: str) -> str:
+def xtb_opt(name: str) -> str:
     """
     Function to run xTB optimization and convert the output to xyz format.
     """
@@ -305,5 +311,72 @@ def crest_protonate(
     shutil.copy2("opt_proto.xyz", f"{homedir}/{name}/")
     shutil.copy2(".CHRG", f"{homedir}/{name}/")
     chdir(homedir)
+
+    return error
+
+
+def get_sdf(cid: str) -> str:
+    """
+    Function to download a compound from PubChem in sdf format.
+    """
+
+    error = ""
+    try:
+        pgout = subprocess.run(
+            ["PubGrep", "--input", "cid", cid, "--output", "sdf"],
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        print(f"Process timed out.\n{exc}")
+        if os.path.exists(f"{cid}.sdf"):
+            os.remove(f"{cid}.sdf")
+        error = f"ERROR - PubGrep timed out for CID {cid}."
+        return error
+    except subprocess.CalledProcessError as exc:
+        print("Status : FAIL", exc.returncode, exc.output)
+        if os.path.exists(f"{cid}.sdf"):
+            os.remove(f"{cid}.sdf")
+        error = f"ERROR - PubGrep failed for CID {cid}."
+        return error
+
+    # print the return code
+    if pgout.returncode != 0:
+        print("Return code:", pgout.returncode)
+
+    if (pgout.stderr.decode("utf-8") == "") or (
+        "normal termination" in pgout.stderr.decode("utf-8")
+    ):
+        print(" " * 3 + f"Downloaded {cid} successfully.")
+        if not os.path.exists(f"{cid}.sdf"):
+            print(
+                " " * 3
+                + f"{bcolors.WARNING}Warning: \
+File {cid}.sdf not found even though it is allocated. Skipping...{bcolors.ENDC}"
+            )
+            error = f"ERROR - PubGrep failed for CID {cid}."
+            return error
+    else:
+        if "abnormal termination" in pgout.stderr.decode("utf-8"):
+            print(
+                " " * 3
+                + f"""{bcolors.WARNING}xTB error in conversion process - \
+skipping CID {cid}.{bcolors.ENDC}"""
+            )
+            error = f"ERROR - PubGrep xTB error in conversion process for CID {cid}."
+            return error
+        elif not "normal termination" in pgout.stderr.decode("utf-8"):
+            print(
+                " " * 3
+                + f"{bcolors.WARNING}Unknown PubGrep/xTB conversion error - \
+skipping CID {cid}.{bcolors.ENDC}"
+            )
+            error = f"Unknown PubGrep/xTB conversion error for CID {cid}."
+        else:
+            print(" " * 3 + f"Unknown PubGrep error for {cid:7d}.")
+            return error
+        if os.path.exists(f"{cid}.sdf"):
+            os.remove(f"{cid}.sdf")
 
     return error
