@@ -17,7 +17,7 @@ from numpy.random import RandomState
 from .evaluate_calc import create_res_dir, eval_calc_ensemble, get_calc_ensemble
 from .evaluate_conf import eval_conf_ensemble
 from .miscelleanous import bcolors, chdir, checkifinpath, create_directory
-from .qmcalc import crest_protonate, crest_sampling, xtbopt
+from .qmcalc import crest_protonate, crest_sampling, xtb_sp, xtbopt
 
 
 def main(arguments: ap.Namespace) -> None:
@@ -27,6 +27,8 @@ def main(arguments: ap.Namespace) -> None:
     # get number of compounds from command line
     numcomp = arguments.numcomp
     opt = arguments.opt
+
+    hlgap_threshold = 0.2
 
     # set the seed
     print(f"Generating random numbers between 1 and {arguments.maxcid:d} ...")
@@ -42,8 +44,8 @@ def main(arguments: ap.Namespace) -> None:
     molname: list[str] = []
     #### Hard-code some CIDs for testing ####
     # values = []
-    # values.append(792349)
-    # values.append(47090)
+    # values.append(5264)
+    # values.append(3207)
     ########################################
     for i in values:
         # Check if the directory exists and skip the CID if it does
@@ -89,7 +91,9 @@ skipping CID {i}.{bcolors.ENDC}"
             if pgout.returncode != 0:
                 print("Return code:", pgout.returncode)
 
-            if pgout.stderr.decode("utf-8") == "":
+            if (pgout.stderr.decode("utf-8") == "") or (
+                "normal termination" in pgout.stderr.decode("utf-8")
+            ):
                 print(" " * 3 + f"Downloaded {i} successfully.")
             else:
                 if "abnormal termination" in pgout.stderr.decode("utf-8"):
@@ -157,6 +161,20 @@ skipping CID {i}.{bcolors.ENDC}"
                 if os.path.exists(f"{i}.sdf"):
                     os.remove(f"{i}.sdf")
                 continue
+            hlgap = 0.0
+            with open(f"{str(i)}/xtb.out", encoding="UTF-8") as f:
+                lines = f.readlines()
+                for line in lines:
+                    if "HOMO-LUMO GAP" in line:
+                        hlgap = float(line.split()[3])
+                        break
+            print(" " * 3 + f"HOMO-LUMO gap: {hlgap:5.2f}")
+            if hlgap < hlgap_threshold:
+                print(
+                    f"{bcolors.WARNING} HOMO-LUMO gap with GFN2-xTB below 0.2 eV - \
+skipping CID {i}.{bcolors.ENDC}"
+                )
+                continue
             print(
                 f"{bcolors.OKGREEN}Structure of \
 {i} successfully generated and optimized.{bcolors.ENDC}"
@@ -193,6 +211,7 @@ skipping CID {i}.{bcolors.ENDC}"
         "pubchem_data",
         "found.results",
         "xtb_3d.out",
+        ".sccnotconverged",
     ]
     for i in files_to_remove:
         if os.path.exists(i):
@@ -201,6 +220,13 @@ skipping CID {i}.{bcolors.ENDC}"
     # print number of successful downloads
     print("\nNumber of successful downloads: ", len(comp))
     print("Compounds: ", comp)
+
+    if len(comp) == 0:
+        print(
+            f"{bcolors.BOLD}No compounds were downloaded. \
+Exiting the program.{bcolors.ENDC}"
+        )
+        exit(0)
 
     # write the list of successful downloads to a file
     if not existing_dirs:
@@ -223,21 +249,73 @@ The list of successful downloads was written only with CIDs.{bcolors.ENDC}"
         # select between CREST run modes
         if arguments.crest == "protonate":
             # determine the number of cores for protonation
+            protonated_cids: list[int] = []
             totalcores = os.cpu_count()
             if totalcores is None:
                 n_threads = 4
             else:
-                n_threads = int(totalcores)
+                n_threads = min(int(totalcores), 4)
             crest_protonate_options: dict[str, int | float | str] = {
                 "nthreads": n_threads,
-                "mddump": 250,
-                "mdlen": "x0.75",
             }
 
+            print(f"{bcolors.BOLD}Running CREST protonations ...{bcolors.ENDC}")
             for i in comp:
                 # run CREST protonation
-                print(f"Running CREST protonation for CID {i} ...")
                 error = crest_protonate(pwd, str(i), crest_protonate_options)
+                if error != "":
+                    print(
+                        f"{bcolors.FAIL}CREST protonation failed with error statement - \
+skipping CID {i}.{bcolors.ENDC}"
+                    )
+                    print("   ERROR: ", error)
+                    continue
+                # quick xtb calculation to check if HL gap is still reasonable
+                chdir(str(i))
+                error = xtb_sp("opt_proto.xyz")
+                hlgap = 0.0
+                try:
+                    with open("xtb.out", encoding="UTF-8") as f:
+                        lines = f.readlines()
+                        for line in lines:
+                            if "HOMO-LUMO GAP" in line:
+                                hlgap = float(line.split()[3])
+                                break
+                except FileNotFoundError:
+                    print(
+                        f"{bcolors.FAIL} GFN2-xTB single-point failed - \
+skipping protonated CID {i}.{bcolors.ENDC}"
+                    )
+                    continue
+                chdir(pwd)
+                if hlgap < hlgap_threshold:
+                    print(
+                        f"{bcolors.WARNING} HOMO-LUMO gap \
+with GFN2-xTB ({hlgap:5.2f}) below {hlgap_threshold:4.2f} eV - \
+skipping protonated CID {i}.{bcolors.ENDC}"
+                    )
+                    continue
+                print(
+                    f"CREST protonation for \
+{bcolors.OKGREEN}CID {i}{bcolors.ENDC} successfully finished."
+                )
+                print(" " * 3 + f"HOMO-LUMO gap: {hlgap:5.2f}")
+                protonated_cids.append(i)
+
+            if len(protonated_cids) == 0:
+                print(
+                    f"{bcolors.BOLD}No protonations were successful. \
+Exiting the program.{bcolors.ENDC}"
+                )
+            reductions = len(comp) - len(protonated_cids)
+            if reductions > 0:
+                print(
+                    f"{bcolors.BOLD}CREST protonations were not successful for \
+{reductions} compounds. Post-processing only with remaining molecules.{bcolors.ENDC}"
+                )
+            # further processing only for protonated CIDs
+            comp = protonated_cids
+            print(f"{bcolors.OKBLUE}CREST protonations finished.{bcolors.ENDC}\n")
 
         # get number of cores
         totalcores = os.cpu_count()

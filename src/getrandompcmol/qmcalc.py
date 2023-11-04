@@ -11,6 +11,34 @@ import subprocess
 from .miscelleanous import bcolors, chdir, create_directory
 
 
+def xtb_sp(name: str) -> str:
+    error = ""
+    pgout = None
+    try:
+        pgout = subprocess.run(
+            ["xtb", name],
+            check=True,
+            capture_output=True,
+            timeout=120,
+        )
+        with open("xtb.out", "w", encoding="UTF-8") as f:
+            f.write(pgout.stdout.decode("utf-8"))
+        with open("xtb.err", "w", encoding="UTF-8") as f:
+            f.write(pgout.stderr.decode("utf-8"))
+    except subprocess.TimeoutExpired as exc:
+        error = " " * 3 + f"Process timed out.\n{exc}"
+        print(error)
+        return error
+    except subprocess.CalledProcessError as exc:
+        print(" " * 3 + f"{bcolors.FAIL}Status : FAIL{bcolors.ENDC}", exc.returncode)
+        with open("xtb_error.out", "w", encoding="UTF-8") as f:
+            f.write(exc.output.decode("utf-8"))
+        error = f"{bcolors.WARNING}xTB optimization failed - skipping CID {name}.{bcolors.ENDC}"
+        print(error)
+        return error
+    return error
+
+
 def xtbopt(name: str) -> str:
     """
     Function to run xTB optimization and convert the output to xyz format.
@@ -47,6 +75,7 @@ def xtbopt(name: str) -> str:
         for line in lines:
             if ":: total charge" in line:
                 chrg = round(float(line.split()[3]))
+                break
     print(" " * 3 + f"Total charge: {chrg:6d}")
     # write chrg to a file called .CHRG
     with open(".CHRG", "w", encoding="UTF-8") as f:
@@ -232,23 +261,49 @@ def crest_protonate(
         with open("crest_error.out", "w", encoding="UTF-8") as f:
             f.write(exc.output.decode("utf-8"))
         chdir(homedir)
-        error = f"CREST conformer search failed - skipping CID {name}."
+        error = f"CREST protonation failed - skipping CID {name}."
+        return error
+
+    try:
+        with open("crest.out", encoding="UTF-8") as f:
+            lines = f.readlines()
+            for line in lines:
+                if "molecular fragmentation" in line:
+                    error = (
+                        f"CREST protonation failed - skipping CID {name}. "
+                        + "Molecule fragmented."
+                    )
+                    chdir(homedir)
+                    return error
+    except FileNotFoundError:
+        error = (
+            f"CREST protonation failed - skipping CID {name}. "
+            + "File 'crest.out' not found."
+        )
+        chdir(homedir)
         return error
 
     # read first nat+2 lines from protonated.xyz and write it to opt_proto.xyz
-    with open("protonated.xyz", encoding="UTF-8") as f:
-        lines = f.readlines()
-        with open("opt_proto.xyz", "w", encoding="UTF-8") as g:
-            print(f"{nat+1}\n", file=g)
-            for i in range(2, nat + 3):
-                g.write(lines[i])
+    try:
+        with open("protonated.xyz", encoding="UTF-8") as f:
+            lines = f.readlines()
+            with open("opt_proto.xyz", "w", encoding="UTF-8") as g:
+                print(f"{nat+1}\n", file=g)
+                for i in range(2, nat + 3):
+                    g.write(lines[i])
+    except FileNotFoundError:
+        error = (
+            f"CREST protonation failed - skipping CID {name}. "
+            + "File 'protonated.xyz' not found."
+        )
+        chdir(homedir)
+        return error
 
     # write new .CHRG file with initial charge + 1
     with open(".CHRG", "w", encoding="UTF-8") as g:
         g.write(str(init_charge + 1) + "\n")
     shutil.copy2("opt_proto.xyz", f"{homedir}/{name}/")
     shutil.copy2(".CHRG", f"{homedir}/{name}/")
-    print(f"{name}, ", end="", flush=True)
     chdir(homedir)
 
     return error
