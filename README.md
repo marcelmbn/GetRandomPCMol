@@ -29,14 +29,14 @@ The flag `-e` allows modification of the code without the need to reinstall.
 
 After installation, the package can generate a data set of random molecules. The randomization is based on a random number generator in `NumPy`.
 ```
-getrandompcmol -n 500 --opt --crest --maxnumat 35 --maxcid 1000000 --seed 27051997 --evalconf 5 10
+getrandompcmol -n 500 --opt --crest protonate --maxnumat 35 --maxcid 1000000 --seed 27051997 --evalconf 5 10
 ```
 The distinct keywords are described as follows:
 - `-n/--n <int>`: controls the number of molecules generated.
 - `--maxnumat <int>`: Maximally allowed number of atoms per molecule.
 - `--maxcid <int>`: Range between 1 and `<maxcid>`, in which random CIDs are generated.
 - - `--opt`: Optimize the molecules using GFN2-xTB in `xtb`.
-- `--crest`: Generate conformer ensembles from the given structures via `crest`.
+- `--crest {normal,protonate}`: Generate conformer ensembles from the given structures via `crest`. If `protonated` is used instead of `normal`, every structure is protonated by `crest` before the actual conformer search.
 - `--seed <int>`: Starting seed for random number generation.
 - `--evalconf <int> <int>`: Range of conformer ensemble size allowed for post-processing.
 
