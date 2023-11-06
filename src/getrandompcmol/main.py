@@ -237,8 +237,8 @@ skipping protonated CID {i}.{bcolors.ENDC}"
                 chdir(pwd)
                 if hlgap < HLGAP_THRESHOLD:
                     print(
-                        f"{bcolors.WARNING} HOMO-LUMO gap \
-with GFN2-xTB ({hlgap:5.2f}) below {HLGAP_THRESHOLD:4.2f} eV - \
+                        f"{bcolors.WARNING}   HOMO-LUMO gap \
+with GFN2-xTB ({hlgap}) below {HLGAP_THRESHOLD:4.2f} eV - \
 skipping protonated CID {i}.{bcolors.ENDC}"
                     )
                     continue

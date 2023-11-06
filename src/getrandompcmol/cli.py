@@ -95,8 +95,8 @@ This option is only useful if you have already generated the conformer ensemble.
 Give 'wipe' as the second argument to delete the conformer directories.",
         required=False,
         default=False,
-        nargs=1,
         type=str,
+        choices=["wipe", "keep"],
     )
 
     args = parser.parse_args()
