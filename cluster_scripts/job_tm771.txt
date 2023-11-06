@@ -1,0 +1,142 @@
+#!/bin/bash
+# PBS Job
+#PBS -V
+#PBS -N wb97xd4_TZVPP
+#PBS -m ae
+#PBS -q single
+#PBS -l nodes=1:ppn=4
+#
+
+cd $PBS_O_WORKDIR
+PATH=/home/$USER/bin:$PATH
+PATH=/home/abt-grimme/AK-bin:$PATH
+export PATH
+
+#Setup TM_latest
+export TURBODIR=/home/abt-grimme/TURBOMOLE.7.7.1
+export PARA_ARCH=SMP
+export PARNODES=`wc -l $PBS_NODEFILE |gawk '{print $1}'`
+source $TURBODIR/Config_turbo_env
+
+export OMP_NUM_THREADS=
+export MKL_NUM_THREADS=`wc -l $PBS_NODEFILE |gawk '{print $1}'`
+ulimit -s unlimited
+export export OMP_STACKSIZE=16000m
+
+export HOSTS_FILE=$PBS_NODEFILE
+cat $HOSTS_FILE>hosts_file
+
+TMP_DIR=/tmp1/$USER
+DIR1=$PWD
+
+mkdir -p $TMP_DIR/$PBS_JOBID
+
+#check file system access
+if [ ! -d $TMP_DIR/$PBS_JOBID ]; then
+ echo "Unable to create $TMP_DIR/$PBS_JOBID  on $HOSTNAME. Must stop."
+ exit
+fi
+
+#check current location
+if [ "$PWD" == "$HOME" ]; then
+ echo "Cowardly refusing to copy the whole home directory"
+ exit
+fi
+
+#copy everything to node (will NOT copy directories for safety reasons. Add an 'r' only if absolutely sure what you are doing)
+#bwlimit limits bandwidth to 5000 kbytes/sec
+ rsync -q --bwlimit=5000 $DIR1/* $TMP_DIR/$PBS_JOBID/
+ scp $DIR1/.CHRG $TMP_DIR/$PBS_JOBID/ ; scp $DIR1/.UHF $TMP_DIR/$PBS_JOBID/
+ scp -r $DIR1/scrat* $TMP_DIR/$PBS_JOBID/
+ cd $TMP_DIR/$PBS_JOBID
+#####################################################################################
+#Gettimings
+start=$(date +%s)
+#####################################################################################
+#jobs start here (if you have no idea what this script does, only edit this part...)
+
+module load mctc-tools
+module load intel/2021.2.0
+skip="n"
+
+mctc-convert struc.xyz coord --normalize > mctc-convert.out 2> mctc-convert.err
+
+mkdir -p wB97X-3c
+cp coord wB97X-3c/
+if [ -f .CHRG ]; then
+    cp .CHRG wB97X-3c/
+fi
+cd wB97X-3c
+    cefine -func wb97x-3c -senex -senexgrid m3 > cefine.out 2> cefine.err
+    ridft > ridft.out 2> ridft.err
+    rdgrad > rdgrad.out 2> rdgrad.err
+    jobex > jobex.out 2> jobex.err
+    if [ ! -f GEO_OPT_CONVERGED ]; then
+        skip="y"
+    else
+        cp coord ../
+    fi
+cd ..
+
+if [[ $skip == "n" ]]; then
+    mkdir -p TZ
+    cp coord TZ/
+    if [ -f .CHRG ]; then
+        cp .CHRG TZ/
+    fi
+    cd TZ
+        cefine -bas def2-TZVPPD -func wb97x-v -noopt -scfconv 6 -grid m5 > tmp 2> tmp.err
+        kdg disp4
+        kdg disp3
+        kdg end
+        echo '$disp4 --param 1.0 0.4485 0.3306 4.279 1.0' >> control # D4 instead of VV10
+        echo '$end' >> control
+        ridft > ridft.out 2> ridft.err
+        rdgrad > rdgrad.out 2> rdgrad.err
+    cd ..
+
+    mkdir -p gp3
+    cp coord gp3/
+    if [ -f .CHRG ]; then
+        cp .CHRG gp3/
+    fi
+    cd gp3
+        gp3 coord > gp3.out 2> gp3.err
+    cd ..
+
+    mkdir -p gfn2
+    cp coord gfn2/
+    if [ -f .CHRG ]; then
+        cp .CHRG gfn2/
+    fi
+    cd gfn2
+        xtb coord --grad > xtb.out 2> xtb.err
+    cd ..
+fi
+
+#end of job      (....and stop editing here.)
+#####################################################################################
+#Print timings to file
+end=$(date +%s)
+secs=$(expr $end - $start)
+printf '%dh:%dm:%02ds\n' $(($secs/3600)) $(($secs%3600/60)) $(($secs%60)) > RUNTIME
+#####################################################################################
+#copy everything back that is smaller than 5 gbytes
+
+ rsync -rq --bwlimit=5000 --max-size=5G $TMP_DIR/$PBS_JOBID/* $DIR1/
+ if [ -f $TMP_DIR/$PBS_JOBID/.G298 ]
+ then
+     scp $TMP_DIR/$PBS_JOBID/.G298 $DIR1/
+     scp $TMP_DIR/$PBS_JOBID/.H298 $DIR1/
+ fi
+
+#to be safe, get mos alpha and beta seperately. Note that the rsync syntax is strange; you need to first include everything, then exclude the rest ("*\" includes subdirectories)
+
+ rsync -rq --bwlimit=5000 --include="*/" --include="mos" --include="alpha" --include="beta" --exclude=* $TMP_DIR/$PBS_JOBID/* $DIR1/
+
+#if you want the large files as well, comment in the following
+
+#rsync -r --bwlimit=1000 --min-size=5G $TMP_DIR/$PBS_JOBID/* $DIR1/
+
+ cd $DIR1
+ rm -r $TMP_DIR/$PBS_JOBID

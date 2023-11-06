@@ -1,0 +1,56 @@
+#!/bin/bash
+
+pushd () {
+        command pushd "$@" > /dev/null
+}
+
+popd () {
+        command popd "$@" > /dev/null
+}
+
+startdir=$( pwd )
+nocores=4
+dirn=${func}
+machine=large
+sleepseconds=20
+if [[ $machine == "large" ]]; then
+    memory=18000
+elif [[ $machine == "single" ]]; then
+    memory=15250
+elif [[ $machine == "batch" ]]; then
+    memory=9000
+fi
+maxmem=$(python3 -c "print( (${nocores})*(${memory}) )")
+
+rm -f .xrun.err
+k=0
+for i in $( cat $startdir/compounds.conformers.txt | awk '{print $1}' )
+do
+    if [[ $i == \#* ]]; then
+        echo "Skipping ${i}..."
+        continue
+    fi
+    pushd "$i"
+        for j in $( cat index.conformers )
+        do
+            if [[ $j == \#* ]]; then
+                echo "Skipping ${j}..."
+                continue
+            fi
+            pushd $j
+                rm -rf TZ gp3 gfn2 wB97X-3c
+                rm -f job_tm771.txt coord struc.xyz hosts_file ${i}* mctc-convert* RUNTIME
+                echo "${i}_${j}"
+                strucfile="${j}.xyz"
+                if [ ! -f $strucfile ]; then
+                    echo "NO structure file present in ${i}!" >> ${startdir}/.xrun.err
+                    exit 1
+                fi
+                cp $strucfile struc.xyz
+                cp ${startdir}/job_tm771.txt .
+                qsub job_tm771.txt -N "${i}_${j}" -q ${machine} -l "nodes=1:ppn=${nocores}" -l "mem=${maxmem}M"
+            popd
+            sleep ${sleepseconds}s
+        done
+    popd
+done
