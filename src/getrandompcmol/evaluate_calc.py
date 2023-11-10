@@ -20,7 +20,9 @@ HARTREE2KCAL = 627.5094740631  # Hartree
 MINDIFF = 0.01  # kcal/mol
 
 
-def get_calc_ensemble() -> dict[int, dict[str, list[str | int | float]]]:
+def get_calc_ensemble(
+    desired_charge: int,
+) -> dict[int, dict[str, list[str | int | float]]]:
     """
     Evaluates a given conformer ensemble.
 
@@ -106,10 +108,10 @@ in {cid} is {len(conformer)}{bcolors.ENDC}"
             )
 
         # check for charge constraints
-        if conformer_prop["charge"] != 0:
+        if conformer_prop["charge"] != desired_charge:
             print(
                 f"{bcolors.WARNING}Warning: \
-Charge of molecule {cid} is not zero. Skipping...{bcolors.ENDC}"
+Charge of molecule {cid} is not equal to {desired_charge}. Skipping...{bcolors.ENDC}"
             )
             chdir(pwd)
             continue
@@ -245,13 +247,23 @@ conformer {k} was deleted in {cid} due to too close-lying energies.{bcolors.ENDC
 
         chdir(pwd)
 
+    # check if the energies dict is empty
+    if len(energies) == 0:
+        print(
+            f"{bcolors.FAIL}Error: No conformer ensemble found. \
+Stopping here.{bcolors.ENDC}"
+        )
+        raise SystemExit(1)
+
     # write the old and new indices to a JSON file
     with open("energies.json", "w", encoding="UTF-8") as f:
         json.dump(energies, f, indent=4)
     return energies
 
 
-def eval_calc_ensemble(confe: dict[int, dict[str, list[str | int | float]]]) -> None:
+def eval_calc_ensemble(
+    confe: dict[int, dict[str, list[str | int | float]]]
+) -> list[int]:
     """
     Evaluates a given conformer ensemble in dictionary format.
     """
@@ -424,7 +436,55 @@ the RMSD is better:{bcolors.ENDC}"
     print(f"{bcolors.BOLD}GP3:   {better_rmsd['GP3']:6d}{bcolors.ENDC}")
     print(f"{bcolors.BOLD}equal: {better_rmsd['equal']:6d}{bcolors.ENDC}")
 
-    # print the total number of data points and the total number of molecules considered
+    # FIRST: create a list with the differences in RMSD between GFN2 and GP3
+    # and sort it in ascending order. Keep the sorting indices to refer to the
+    # original molecule numbering
+    # THEN: print the RMSD differences for the 10 best and 10 worst cases
+    # PRINT: the molecule CID number, the name, the RMSD difference, the GFN2 RMSD,
+    # the GP3 RMSD
+
+    # create a list with the differences in RMSD between GFN2 and GP3
+    rmsd_diff: list[float] = []
+    for i in range(len(rmsd["GFN2"])):
+        rmsd_diff.append(rmsd["GFN2"][i] - rmsd["GP3"][i])
+    # sort the list in ascending order
+    indices = sorted(range(len(rmsd_diff)), key=lambda k: rmsd_diff[k])
+    rmsd_diff = [rmsd_diff[k] for k in indices]
+    rmsd_gfn2 = [rmsd["GFN2"][k] for k in indices]
+    rmsd_gp3 = [rmsd["GP3"][k] for k in indices]
+    rmsd_cid = [list(confe.keys())[k] for k in indices]
+    # rmsd_name = [confe[list(confe.keys())[k]]["name"][0] for k in indices]
+
+    # print the RMSD differences for the 10 best and 10 worst cases
+    print(
+        f"\n{bcolors.OKCYAN}10 best and 10 worst cases \
+for the RMSD difference between GFN2 and GP3:{bcolors.ENDC}"
+    )
+    print(
+        5 * " "
+        + f"{bcolors.OKCYAN}Mol:"
+        + 5 * " "
+        + "dRMSD"
+        + 2 * " "
+        + f"GFN2"
+        + 3 * " "
+        + f"GP3{bcolors.ENDC}"
+    )
+    print(f"{bcolors.BOLD}Best cases:{bcolors.ENDC}")
+    for i in range(len(rmsd_diff) - 10, len(rmsd_diff)):
+        print(
+            3 * " "
+            + f"{rmsd_cid[i]:8d}: \
+{rmsd_diff[i]:6.3f} {rmsd_gfn2[i]:6.3f} {rmsd_gp3[i]:6.3f}"
+        )
+    print(f"{bcolors.BOLD}Worst cases:{bcolors.ENDC}")
+    for i in range(10):
+        print(
+            3 * " "
+            + f"{rmsd_cid[i]:8d}: \
+{rmsd_diff[i]:6.3f} {rmsd_gfn2[i]:6.3f} {rmsd_gp3[i]:6.3f}"
+        )
+
     print(
         f"\n{bcolors.BOLD}Total number of data points: \
 {ndatapoints}{bcolors.ENDC}"
@@ -434,9 +494,15 @@ the RMSD is better:{bcolors.ENDC}"
 {nmolecules}{bcolors.ENDC}"
     )
 
+    # return the cids of the ten worst cases
+    return rmsd_cid[:10]
+
 
 def create_res_dir(
-    energy_db: dict[int, dict[str, list[str | int | float]]], wipe: bool
+    energy_db: dict[int, dict[str, list[str | int | float]]],
+    wipe: bool,
+    desired_charge: int,
+    worst_cids: list[int] = [],
 ) -> None:
     """
     Creates the result directory if it does not exist already.
@@ -447,6 +513,10 @@ def create_res_dir(
     tzfilestocopy = ["energy", "control", "coord", "ridft.out", "gradient", "basis"]
 
     resfile = "res.sh"
+
+    # if worst_cids not empty; remove all entries from energy_db that are NOT in worst_cids
+    if len(worst_cids) > 0:
+        energy_db = {k: v for k, v in energy_db.items() if k in worst_cids}
 
     # check the file system for the existence of the first entry of the energy_db
     # if it exists, the directory structure is assumed to be correct
@@ -499,11 +569,12 @@ Wiping it...{bcolors.ENDC}"
     # iteratate over all conformer ensembles in the energy_db
     for mol in energy_db.keys():
         # check if it is a charged species
-        if energy_db[mol]["charge"] != 0:
+        if energy_db[mol]["charge"] != desired_charge:
             print(
                 f"{bcolors.WARNING}Warning: \
-Charge of molecule {mol} is not zero.{bcolors.ENDC}"
+Charge of molecule {mol} is not equal to {desired_charge}.{bcolors.ENDC}"
             )
+        if energy_db[mol]["charge"] != 0:
             tzfilestocopy.append(".CHRG")
 
         # create a directory for each conformer
@@ -530,6 +601,12 @@ Directory {mol}/{energy_db[mol]['conformer_lowest'][0]}/TZ/{file} not found."
                 f"{mol}/{energy_db[mol]['conformer_lowest'][0]}/TZ/coord",
                 f"res_archive/{prefix}_{mol}_1/coord",
             )
+            if energy_db[mol]["charge"] != 0:
+                # copy the .CHRG file to the new directory
+                shutil.copy2(
+                    f"{mol}/{energy_db[mol]['conformer_lowest'][0]}/TZ/.CHRG",
+                    f"res_archive/{prefix}_{mol}_1/",
+                )
             print(
                 f"{bcolors.OKGREEN}Copied files for molecule {mol} to \
 res_archive/{prefix}_{mol}_1.{bcolors.ENDC}"
@@ -586,6 +663,12 @@ Directory {mol}/{conf}/TZ/{file} not found."
                 f"{mol}/{conf}/TZ/coord",
                 f"res_archive/{prefix}_{mol}_{k}/coord",
             )
+            if energy_db[mol]["charge"] != 0:
+                # copy the .CHRG file to the new directory
+                shutil.copy2(
+                    f"{mol}/{conf}/TZ/.CHRG",
+                    f"res_archive/{prefix}_{mol}_{k}/",
+                )
             struclocation = str(f"{prefix}_{mol}_{k}/")
             dirpath = "res_archive/" + struclocation
             dirpathin = dirpath + "coord"
@@ -624,6 +707,10 @@ Directory {mol}/{conf}/TZ/{file} not found."
                     # the lowest one and the array starts at 0 instead of 1
                 )
                 print(resline, file=f)
+
+        # if it exists, remove the entry ".CHRG" from the tzfilestocopy list
+        if ".CHRG" in tzfilestocopy:
+            tzfilestocopy.remove(".CHRG")
 
 
 def read_energy_file(file: str) -> float:

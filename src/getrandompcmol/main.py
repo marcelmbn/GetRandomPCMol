@@ -96,6 +96,9 @@ skipping CID {i}.{bcolors.ENDC}"
 
             direxists = create_directory(str(i))
             shutil.copy2(f"{pwd}/{i}.sdf", f"{pwd}/{i}/{i}.sdf")
+            # > remove the sdf file from the main directory if it exists
+            if os.path.exists(f"{pwd}/{i}.sdf"):
+                os.remove(f"{pwd}/{i}.sdf")
 
         if opt:
             chdir(str(i))

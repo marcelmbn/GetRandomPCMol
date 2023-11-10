@@ -10,6 +10,9 @@ from .evaluate_conf import eval_conf_ensemble
 from .main import main
 from .miscelleanous import bcolors, checkifinpath
 
+DESIREDCHARGE = 1
+TAKEONLYWORST = True
+
 
 def console_entry_point() -> int:
     """
@@ -160,12 +163,15 @@ and no compound directories provided.{bcolors.ENDC}"
         return 0
 
     if args.evalcalconly:
-        calcenergies = get_calc_ensemble()
-        eval_calc_ensemble(calcenergies)
+        calcenergies = get_calc_ensemble(DESIREDCHARGE)
+        worstcids = eval_calc_ensemble(calcenergies)
         wipe = False
-        if args.evalcalconly[0] == "wipe":
+        if args.evalcalconly == "wipe":
             wipe = True
-        create_res_dir(calcenergies, wipe)
+        if TAKEONLYWORST:
+            create_res_dir(calcenergies, wipe, DESIREDCHARGE, worstcids)
+        else:
+            create_res_dir(calcenergies, wipe, DESIREDCHARGE)
         return 0
 
     main(args)
