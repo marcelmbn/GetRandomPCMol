@@ -18,7 +18,7 @@ export PARA_ARCH=SMP
 export PARNODES=`wc -l $PBS_NODEFILE |gawk '{print $1}'`
 source $TURBODIR/Config_turbo_env
 
-export OMP_NUM_THREADS=
+export OMP_NUM_THREADS=`wc -l $PBS_NODEFILE |gawk '{print $1}'`
 export MKL_NUM_THREADS=`wc -l $PBS_NODEFILE |gawk '{print $1}'`
 ulimit -s unlimited
 export export OMP_STACKSIZE=16000m
